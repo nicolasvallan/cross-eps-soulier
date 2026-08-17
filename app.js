@@ -211,45 +211,7 @@ function queueCloudSave(){
     );
   });
 }
-function restorePendingSync(){
-  if(!currentEventId || !currentAccess)return false;
 
-  const raw=localStorage.getItem("cross-eps-pending-sync");
-  if(!raw)return false;
-
-  try{
-    const pending=JSON.parse(raw);
-
-    if(pending.eventId !== currentEventId)return false;
-
-    const pendingState=normalizeState(pending.state);
-    const pendingBase=normalizeState(pending.base);
-
-    // Fusionne ce qui avait été fait hors ligne avec l'état
-    // actuellement chargé afin de ne pas perdre les actions locales.
-    state=mergeCloudValue(
-      pendingBase,
-      pendingState,
-      state
-    );
-
-    localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
-    renderAll();
-
-    if(navigator.onLine){
-      setCloudStatus("Reprise des modifications en attente…","syncing");
-      queueCloudSave();
-    }else{
-      setCloudStatus("Hors ligne · modifications en attente","offline");
-    }
-
-    return true;
-
-  }catch(err){
-    console.error("Restauration hors ligne",err);
-    return false;
-  }
-}
 window.addEventListener("offline",()=>{
   if(currentAccess){
     setCloudStatus("Hors ligne · modifications en attente","offline");
