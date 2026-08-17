@@ -128,9 +128,27 @@ function save(){
 
 function queueCloudSave(){
   if(!currentEventId)return;
+
   const baseSnapshot=deepClone(lastSyncedState);
   const localSnapshot=deepClone(state);
   const expectedVersion=currentStateVersion;
+
+  // On conserve toujours la dernière modification locale en attente.
+  localStorage.setItem(
+    "cross-eps-pending-sync",
+    JSON.stringify({
+      eventId:currentEventId,
+      base:baseSnapshot,
+      state:localSnapshot,
+      version:expectedVersion
+    })
+  );
+
+  if(!navigator.onLine){
+    setCloudStatus("Hors ligne · modifications en attente","offline");
+    return;
+  }
+
   setCloudStatus("Synchronisation…","syncing");
 
   saveQueue=saveQueue.then(async()=>{
@@ -141,11 +159,13 @@ function queueCloudSave(){
 
     while(attempt<5){
       attempt++;
+
       const {data,error}=await supabaseClient.rpc("save_app_state",{
         p_event_id:currentEventId,
         p_expected_version:expected,
         p_state:local
       });
+
       if(error)throw error;
 
       const row=Array.isArray(data)?data[0]:data;
@@ -157,6 +177,8 @@ function queueCloudSave(){
       if(row.saved){
         currentStateVersion=remoteVersion;
         lastSyncedState=deepClone(remote);
+
+        localStorage.removeItem("cross-eps-pending-sync");
         setCloudStatus("Synchronisé","online");
         return;
       }
@@ -167,11 +189,40 @@ function queueCloudSave(){
     }
 
     throw new Error("Trop de modifications simultanées. Réessayez.");
+
   }).catch(err=>{
     console.error("Supabase save",err);
-    setCloudStatus("Erreur de synchronisation","error");
+
+    localStorage.setItem(
+      "cross-eps-pending-sync",
+      JSON.stringify({
+        eventId:currentEventId,
+        base:baseSnapshot,
+        state:localSnapshot,
+        version:expectedVersion
+      })
+    );
+
+    setCloudStatus(
+      navigator.onLine
+        ? "Synchronisation en attente"
+        : "Hors ligne · modifications en attente",
+      navigator.onLine ? "error" : "offline"
+    );
   });
 }
+window.addEventListener("offline",()=>{
+  if(currentAccess){
+    setCloudStatus("Hors ligne · modifications en attente","offline");
+  }
+});
+
+window.addEventListener("online",()=>{
+  if(currentAccess && currentEventId){
+    setCloudStatus("Connexion retrouvée · synchronisation…","syncing");
+    queueCloudSave();
+  }
+});
 
 async function ensureWorkspaceForAdmin(){
   if(!currentEventId){
