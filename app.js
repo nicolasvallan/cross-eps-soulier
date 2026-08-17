@@ -312,24 +312,79 @@ async function ensureWorkspaceForAdmin(){
 
 async function loadWorkspaceState(){
   if(!currentEventId)return;
+
   const {data,error}=await supabaseClient
     .from("app_state")
     .select("version,state,updated_at,updated_by")
     .eq("event_id",currentEventId)
     .single();
+
   if(error)throw error;
 
   const incoming=normalizeState(data.state);
+
   currentStateVersion=Number(data.version)||0;
   workspaceMeta.updatedAt=data.updated_at||null;
   workspaceMeta.updatedBy=data.updated_by||null;
 
   applyingCloudSnapshot=true;
-  state=incoming;
+
+  // Vérifie s'il existe des modifications effectuées hors connexion
+  // avant la fermeture de l'application.
+  let pending=null;
+
+  try{
+    const raw=localStorage.getItem("cross-eps-pending-sync");
+
+    if(raw){
+      const parsed=JSON.parse(raw);
+
+      if(parsed.eventId===currentEventId){
+        pending=parsed;
+      }
+    }
+  }catch(err){
+    console.error("Lecture sauvegarde hors ligne",err);
+  }
+
+  if(pending){
+    const pendingBase=normalizeState(pending.base);
+    const pendingState=normalizeState(pending.state);
+
+    // Fusionne :
+    // - l'ancien état connu du téléphone
+    // - les actions faites hors connexion
+    // - l'état actuel de Supabase
+    state=mergeCloudValue(
+      pendingBase,
+      pendingState,
+      incoming
+    );
+  }else{
+    state=incoming;
+  }
+
   lastSyncedState=deepClone(incoming);
-  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify(state)
+  );
+
   renderAll();
+
   applyingCloudSnapshot=false;
+
+  // Si des données hors ligne ont été récupérées,
+  // on les renvoie maintenant vers Supabase.
+  if(pending){
+    setCloudStatus(
+      "Reprise des modifications en attente…",
+      "syncing"
+    );
+
+    queueCloudSave();
+  }
 }
 
 function startWorkspaceListener(){
