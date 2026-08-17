@@ -256,10 +256,28 @@ window.addEventListener("offline",()=>{
   }
 });
 
-window.addEventListener("online",()=>{
-  if(currentAccess && currentEventId){
-    setCloudStatus("Connexion retrouvée · synchronisation…","syncing");
-    queueCloudSave();
+window.addEventListener("online",async()=>{
+  if(!currentAccess || !currentEventId)return;
+
+  setCloudStatus(
+    "Connexion retrouvée · récupération des données…",
+    "syncing"
+  );
+
+  try{
+    // Recharge d'abord la version actuelle de Supabase.
+    // loadWorkspaceState() fusionnera aussi les éventuelles
+    // modifications hors ligne conservées sur le téléphone.
+    await loadWorkspaceState();
+
+    setCloudStatus(
+      "Connexion retrouvée · synchronisation…",
+      "syncing"
+    );
+
+  }catch(err){
+    console.error("Reconnexion Supabase",err);
+    setCloudStatus("Synchronisation en attente","error");
   }
 });
 
@@ -2486,9 +2504,7 @@ async function activateTeacherAccess(session){
   hideAuthGate();
   applyRoleUI();
   startWorkspaceListener();
-  setTimeout(()=>{
-  restorePendingSync();
-},1000);
+  
   startTeacherSessionWatch(session.eventId,session.expiry);
 }
 
