@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>Cross EPS</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Cross EPS <span class="version-badge">V19 Supabase</span></h1>
+      <p>Gestion synchronisée des élèves, courses, passages, arrivées et résultats</p>
+    </div>
+    <div class="topbar-actions">
+      <span id="cloudStatus" class="cloud-status offline">● Hors connexion</span>
+      <span id="accessRoleBadge" class="role-badge" hidden></span>
+      <button id="logoutBtn" class="btn topbar-btn" hidden>Quitter</button>
+      <button id="menuBtn" class="menu-btn" aria-label="Menu">☰</button>
+    </div>
+  </header>
+
+  <div class="app-shell">
+    <nav id="sidebar" class="sidebar">
+      <button class="nav-btn active" data-view="dashboard">🏠 Tableau de bord</button>
+      <button class="nav-btn" data-view="students">👥 Élèves</button>
+      <button class="nav-btn" data-view="races">🏁 Courses</button>
+      <button class="nav-btn" data-view="timing">⏱️ Chronométrage</button>
+      <button class="nav-btn" data-view="startgroups">🚦 Départs groupés</button>
+      <button class="nav-btn" data-view="participantstatus">🚫 Non-partants / abandons</button>
+      <button class="nav-btn" data-view="checkpoint">📍 Point de passage</button>
+      <button class="nav-btn" data-view="finish">✅ Arrivée</button>
+      <button class="nav-btn" data-view="results">📊 Résultats</button>
+      <button class="nav-btn" data-view="bibs">🎫 Dossards</button>
+      <button class="nav-btn" data-view="events">📁 Manifestations</button>
+      <button class="nav-btn" data-view="settings">⚙️ Paramètres</button>
+    </nav>
+
+    <main class="main-content">
+      <section id="dashboard" class="view active-view">
+        <div class="section-head">
+          <div>
+            <h2>Tableau de bord</h2>
+            <p>Vue d'ensemble de la journée de cross.</p>
+          </div>
+        </div>
+
+        <div class="cards four">
+          <article class="stat-card"><span>Élèves</span><strong id="statStudents">0</strong></article>
+          <article class="stat-card"><span>Courses</span><strong id="statRaces">0</strong></article>
+          <article class="stat-card"><span>En course</span><strong id="statRunning">0</strong></article>
+          <article class="stat-card"><span>Arrivés</span><strong id="statFinished">0</strong></article>
+        </div>
+
+        <div class="panel">
+          <h3>Utilisation rapide</h3>
+          <ol class="steps">
+            <li>Importez ou ajoutez les élèves.</li>
+            <li>Attribuez les dossards.</li>
+            <li>Créez les courses et affectez les participants.</li>
+            <li>Démarrez le chronomètre général.</li>
+            <li>Validez les passages et les arrivées par numéro de dossard.</li>
+            <li>Corrigez si nécessaire puis exportez les résultats.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section id="students" class="view">
+        <div class="section-head">
+          <div><h2>Élèves</h2><p>Base élèves et attribution des dossards.</p></div>
+          <div class="actions wrap">
+            <label class="btn secondary file-btn">Importer CSV / Excel<input id="csvInput" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden></label>
+            <button id="assignBibBtn" class="btn secondary">Attribuer selon les courses</button>
+          <button id="resetStudentsBtn" class="btn danger">Réinitialiser les élèves</button>
+            <button id="addStudentBtn" class="btn primary">+ Ajouter</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="toolbar">
+            <input id="studentSearch" class="input" placeholder="Rechercher nom, prénom, classe, dossard..." />
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Dossard</th><th>Nom</th><th>Prénom</th><th>Naissance</th><th>Genre</th><th>Classe</th><th>Actions</th></tr></thead>
+              <tbody id="studentsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="races" class="view">
+        <div class="section-head">
+          <div><h2>Courses</h2><p>Distances, catégories et participants.</p></div>
+          <button id="addRaceBtn" class="btn primary">+ Nouvelle course</button>
+        </div>
+        <div id="raceCards" class="cards two"></div>
+      </section>
+
+      <section id="timing" class="view">
+        <div class="section-head">
+          <div><h2>Chronométrage</h2><p>Démarrage du chronomètre commun à tous les participants.</p></div>
+        </div>
+        <div class="panel">
+          <div class="form-grid">
+            <div>
+              <label>Mode</label>
+              <select id="timingModeSelect" class="input">
+                <option value="race">Une seule catégorie</option>
+                <option value="group">Départ groupé</option>
+              </select>
+            </div>
+            <div id="timingRaceWrap">
+              <label>Catégorie / course</label>
+              <select id="timingRaceSelect" class="input"></select>
+            </div>
+            <div id="timingGroupWrap" style="display:none">
+              <label>Départ groupé</label>
+              <select id="timingGroupSelect" class="input"></select>
+            </div>
+          </div>
+          <div class="timer" id="mainTimer">00:00.0</div>
+          <div class="actions center">
+            <button id="startRaceBtn" class="btn success">Démarrer</button>
+            <button id="stopRaceBtn" class="btn danger">Arrêter</button>
+            <button id="resetRaceBtn" class="btn secondary">Réinitialiser</button>
+          </div>
+          <p id="timingStatus" class="muted center-text"></p>
+        </div>
+      </section>
+
+
+      <section id="startgroups" class="view">
+        <div class="section-head">
+          <div><h2>Départs groupés</h2><p>Plusieurs catégories peuvent partir exactement au même moment.</p></div>
+          <button id="addStartGroupBtn" class="btn primary">+ Nouveau départ groupé</button>
+        </div>
+        <div id="startGroupCards" class="cards two"></div>
+      </section>
+
+
+      <section id="participantstatus" class="view">
+        <div class="section-head">
+          <div>
+            <h2>Non-partants / abandons</h2>
+            <p>Les statuts restent modifiables avant et pendant la course, y compris pour un départ groupé.</p>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="form-grid">
+            <div>
+              <label>Mode</label>
+              <select id="statusModeSelect" class="input">
+                <option value="race">Une seule catégorie</option>
+                <option value="group">Départ groupé</option>
+              </select>
+            </div>
+            <div id="statusRaceWrap">
+              <label>Course / catégorie</label>
+              <select id="statusRaceSelect" class="input"></select>
+            </div>
+            <div id="statusGroupWrap" style="display:none">
+              <label>Départ groupé</label>
+              <select id="statusGroupSelect" class="input"></select>
+            </div>
+            <div>
+              <label>Rechercher un élève</label>
+              <input id="statusStudentSearch" class="input" placeholder="Dossard, nom, prénom, classe..." />
+            </div>
+          </div>
+
+          <div class="status-stats">
+            <div class="status-stat"><strong id="statusActiveCount">0</strong><span>Actifs</span></div>
+            <div class="status-stat"><strong id="statusNoStartCount">0</strong><span>Non-partants</span></div>
+            <div class="status-stat"><strong id="statusAbandonedCount">0</strong><span>Abandons</span></div>
+            <div class="status-stat"><strong id="statusFinishedCount">0</strong><span>Arrivés</span></div>
+          </div>
+        </div>
+
+        <div class="cards two status-columns">
+          <div class="panel">
+            <h3>Participants actifs</h3>
+            <p class="muted small-note">Utilisez « Non-partant » avant le départ ou « Abandon » pendant la course.</p>
+            <div id="statusActiveList" class="status-list"></div>
+          </div>
+
+          <div class="panel">
+            <h3>Élèves retirés de la course</h3>
+            <div class="status-subgroup">
+              <h4>Non-partants</h4>
+              <div id="statusNoStartList" class="status-list"></div>
+            </div>
+            <div class="status-subgroup">
+              <h4>Abandons</h4>
+              <div id="statusAbandonedList" class="status-list"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="checkpoint" class="view">
+        <div class="section-head">
+          <div><h2>Point de passage</h2><p>Cliquez sur un dossard au passage de l'élève. Les non-partants et abandons sont automatiquement masqués.</p></div>
+        </div>
+        <div class="panel">
+          <div class="form-grid">
+            <div>
+              <label>Mode</label>
+              <select id="checkpointModeSelect" class="input">
+                <option value="race">Une seule catégorie</option>
+                <option value="group">Départ groupé</option>
+              </select>
+            </div>
+            <div id="checkpointRaceWrap">
+              <label>Course / catégorie</label>
+              <select id="checkpointRaceSelect" class="input"></select>
+            </div>
+            <div id="checkpointGroupWrap" style="display:none">
+              <label>Départ groupé</label>
+              <select id="checkpointGroupSelect" class="input"></select>
+            </div>
+            <div><label>Nom du point</label><input id="checkpointName" class="input" value="Point 1" /></div>
+          </div>
+          <div id="checkpointBibs" class="bib-grid"></div>
+          <div class="panel soft">
+            <h3>Derniers passages</h3>
+            <div id="checkpointLog"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="finish" class="view">
+        <div class="section-head">
+          <div><h2>Arrivée</h2><p>Cliquez sur le dossard au franchissement de la ligne. Les non-partants et abandons sont automatiquement masqués.</p></div>
+        </div>
+        <div class="panel">
+          <div class="form-grid">
+            <div>
+              <label>Mode d'arrivée</label>
+              <select id="finishModeSelect" class="input">
+                <option value="race">Une seule catégorie</option>
+                <option value="group">Départ groupé</option>
+              </select>
+            </div>
+            <div id="finishRaceWrap">
+              <label>Catégorie / course</label>
+              <select id="finishRaceSelect" class="input"></select>
+            </div>
+            <div id="finishGroupWrap" style="display:none">
+              <label>Départ groupé</label>
+              <select id="finishGroupSelect" class="input"></select>
+            </div>
+          </div>
+          <div id="finishBibs" class="bib-grid"></div>
+          <div class="panel soft">
+            <h3>Dernières arrivées</h3>
+            <div id="finishLog"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="results" class="view">
+        <div class="section-head">
+          <div><h2>Résultats</h2><p>Consultez une catégorie seule, un départ groupé ou une course archivée.</p></div>
+          <div class="actions">
+            <button id="archiveResultsBtn" class="btn secondary">Sauvegarder les résultats</button>
+            <button id="exportResultsBtn" class="btn primary">Exporter CSV</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="form-grid">
+            <div>
+              <label>Affichage</label>
+              <select id="resultsModeSelect" class="input">
+                <option value="race">Une seule catégorie</option>
+                <option value="group">Départ groupé</option>
+                <option value="archive">Archive</option>
+              </select>
+            </div>
+            <div id="resultsRaceWrap">
+              <label>Course / catégorie</label>
+              <select id="resultsRaceSelect" class="input"></select>
+            </div>
+            <div id="resultsGroupWrap" style="display:none">
+              <label>Départ groupé</label>
+              <select id="resultsGroupSelect" class="input"></select>
+            </div>
+            <div id="resultsArchiveWrap" style="display:none">
+              <label>Course archivée</label>
+              <select id="resultsArchiveSelect" class="input"></select>
+            </div>
+            <div>
+              <label>Classe affichée</label>
+              <select id="resultsClassSelect" class="input">
+                <option value="">Toutes les classes</option>
+              </select>
+            </div>
+          </div>
+          <div class="cards four compact">
+            <article class="stat-card"><span>Participants</span><strong id="rParticipants">0</strong></article>
+            <article class="stat-card"><span>Arrivés</span><strong id="rFinishers">0</strong></article>
+            <article class="stat-card"><span>Meilleur temps</span><strong id="rBest">—</strong></article>
+            <article class="stat-card"><span>Vitesse moyenne</span><strong id="rAvgSpeed">—</strong></article>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead id="resultsTableHead"><tr><th>Rang course</th><th>Rang classe</th><th>Dossard</th><th>Élève</th><th>Classe</th><th>Catégorie</th><th>Temps</th><th>Vitesse</th><th>Allure</th><th>Actions</th></tr></thead>
+              <tbody id="resultsBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Classement par classe</h3>
+          <p class="muted">Méthode actuelle : moyenne des rangs des élèves classés de chaque classe.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Rang</th><th>Classe</th><th>Élèves classés</th><th>Moyenne des places</th></tr></thead>
+              <tbody id="classRankingBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+
+      <section id="bibs" class="view">
+        <div class="section-head">
+          <div><h2>Dossards</h2><p>Génération A5 : 2 dossards sur une page A4.</p></div>
+          <button id="printBibsBtn" class="btn primary">Imprimer / Enregistrer en PDF</button>
+        </div>
+
+        <div class="bibs-layout">
+          <div>
+            <div class="panel">
+              <h3>1. Sélectionner la course</h3>
+              <label>Course</label>
+              <select id="bibRaceSelect" class="input"></select>
+            </div>
+
+            <div class="panel">
+              <h3>2. Logos et contenu</h3>
+              <div class="form-grid">
+                <div>
+                  <label>Logo du collège</label>
+                  <input id="schoolLogoInput" class="input" type="file" accept="image/*" />
+                </div>
+                <div>
+                  <label>Logo de l'association</label>
+                  <input id="charityLogoInput" class="input" type="file" accept="image/*" />
+                </div>
+              </div>
+              <div class="form-grid">
+                <div>
+                  <label>Nom de l'établissement</label>
+                  <input id="schoolNameInput" class="input" value="Collège Jean-Jacques Soulier – Montluçon" />
+                </div>
+                <div>
+                  <label>Texte caritatif</label>
+                  <input id="charityTextInput" class="input" value="Course caritative au profit de Vaincre la Mucoviscidose" />
+                </div>
+              </div>
+              <p class="muted">Les deux logos restent modifiables et sont mémorisés localement sur l'appareil.</p>
+            </div>
+
+            <div class="panel">
+              <div class="section-head compact">
+                <div>
+                  <h3>3. Taille des éléments</h3>
+                  <p class="muted small-note">Chaque élément peut être agrandi ou réduit indépendamment. L'aperçu et le PDF utilisent les mêmes réglages.</p>
+                </div>
+                <button type="button" id="resetBibSizesBtn" class="btn secondary">Tailles par défaut</button>
+              </div>
+
+              <div class="bib-size-controls">
+                <label class="bib-size-control">
+                  <span>Numéro de dossard <strong id="bibNumberScaleValue">100 %</strong></span>
+                  <input id="bibNumberScale" type="range" min="60" max="180" step="5" value="100" />
+                </label>
+
+                <label class="bib-size-control">
+                  <span>Nom / prénom <strong id="bibStudentScaleValue">100 %</strong></span>
+                  <input id="bibStudentScale" type="range" min="60" max="160" step="5" value="100" />
+                </label>
+
+                <label class="bib-size-control">
+                  <span>Classe <strong id="bibClassScaleValue">100 %</strong></span>
+                  <input id="bibClassScale" type="range" min="60" max="160" step="5" value="100" />
+                </label>
+
+                <label class="bib-size-control">
+                  <span>Nom de la course / distance <strong id="bibRaceScaleValue">100 %</strong></span>
+                  <input id="bibRaceScale" type="range" min="60" max="160" step="5" value="100" />
+                </label>
+
+                <label class="bib-size-control">
+                  <span>Nom de l'établissement <strong id="bibSchoolScaleValue">100 %</strong></span>
+                  <input id="bibSchoolScale" type="range" min="60" max="160" step="5" value="100" />
+                </label>
+
+                <label class="bib-size-control">
+                  <span>Texte caritatif <strong id="bibCharityScaleValue">100 %</strong></span>
+                  <input id="bibCharityScale" type="range" min="60" max="160" step="5" value="100" />
+                </label>
+
+                <label class="bib-size-control">
+                  <span>Logo du collège <strong id="bibSchoolLogoScaleValue">100 %</strong></span>
+                  <input id="bibSchoolLogoScale" type="range" min="50" max="180" step="5" value="100" />
+                </label>
+
+                <label class="bib-size-control">
+                  <span>Logo de l'association <strong id="bibCharityLogoScaleValue">100 %</strong></span>
+                  <input id="bibCharityLogoScale" type="range" min="50" max="180" step="5" value="100" />
+                </label>
+              </div>
+            </div>
+
+            <div class="panel">
+              <h3>4. Format</h3>
+              <p><strong>A5 (148 × 210 mm)</strong> — 2 dossards par feuille A4 portrait.</p>
+              <p class="muted">Le bouton PDF ouvre l'impression : choisissez « Enregistrer au format PDF », papier A4 et échelle 100 %.</p>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h3>Aperçu</h3>
+            <div id="bibPreview" class="bib-preview"></div>
+          </div>
+        </div>
+      </section>
+
+
+      <section id="events" class="view">
+        <div class="section-head">
+          <div>
+            <h2>Manifestations</h2>
+            <p>Créez un dossier par événement et regroupez-y tous les documents nécessaires.</p>
+          </div>
+          <button id="addEventBtn" class="btn primary">+ Nouvelle manifestation</button>
+        </div>
+
+        <div class="panel">
+          <div class="form-grid">
+            <div>
+              <label>Rechercher</label>
+              <input id="eventSearch" class="input" placeholder="Nom, lieu, date, notes..." />
+            </div>
+            <div>
+              <label>État</label>
+              <select id="eventStatusFilter" class="input">
+                <option value="">Tous</option>
+                <option value="Prévue">Prévue</option>
+                <option value="Terminée">Terminée</option>
+                <option value="Annulée">Annulée</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div id="eventCards" class="cards two"></div>
+      </section>
+
+      <section id="settings" class="view">
+        <div class="section-head">
+          <div><h2>Paramètres</h2><p>Synchronisation, accès temporaires et sauvegardes.</p></div>
+        </div>
+
+        <div id="cloudAdminPanel" class="panel cloud-admin-panel">
+          <div class="section-head compact">
+            <div>
+              <h3>Accès multi-appareils</h3>
+              <p>Créez un code temporaire à communiquer aux enseignants le jour du CROSS.</p>
+            </div>
+            <span id="adminIdentity" class="muted"></span>
+          </div>
+          <div class="access-code-grid">
+            <div>
+              <label>Durée du code</label>
+              <select id="accessDuration" class="input">
+                <option value="6">6 heures</option>
+                <option value="12">12 heures</option>
+                <option value="24" selected>24 heures</option>
+              </select>
+            </div>
+            <div class="access-code-actions">
+              <button id="createAccessCodeBtn" class="btn primary">Générer un code</button>
+              <button id="closeAccessCodeBtn" class="btn danger" hidden>Fermer l'accès</button>
+            </div>
+          </div>
+          <div id="activeAccessCard" class="active-access-card" hidden>
+            <span>Code enseignant actif</span>
+            <strong id="activeAccessCode">------</strong>
+            <small id="activeAccessExpiry"></small>
+            <p>Les enseignants saisissent ce code puis choisissent leur poste : Départ, Point de passage ou Arrivée.</p>
+          </div>
+          <p id="cloudSyncDetails" class="muted small-note">Connexion Firebase en attente.</p>
+        </div>
+
+        <div class="panel">
+          <h3>Sauvegardes</h3>
+          <p>Les données sportives sont synchronisées avec Firestore. Le fichier JSON reste disponible comme sauvegarde de secours. Les fichiers joints aux manifestations restent pour l'instant stockés localement sur l'appareil où ils ont été ajoutés.</p>
+          <div class="actions wrap">
+            <button id="downloadBackupBtn" class="btn secondary">Télécharger une sauvegarde JSON</button>
+            <label class="btn secondary file-btn">Restaurer une sauvegarde<input id="restoreBackupInput" type="file" accept=".json,application/json" hidden></label>
+            <button id="demoDataBtn" class="btn secondary">Charger des données de démonstration</button>
+            <button id="clearDataBtn" class="btn danger">Effacer toutes les données</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+
+  <div id="authGate" class="auth-gate">
+    <div class="auth-card">
+      <div class="auth-logo">🏃</div>
+      <h2>CROSS EPS</h2>
+      <p class="muted">Application synchronisée du cross avec Supabase.</p>
+
+      <div id="authMessage" class="auth-message" hidden></div>
+
+      <section class="auth-section">
+        <h3>Enseignant le jour du CROSS</h3>
+        <p>Saisissez le code temporaire communiqué par l'organisateur.</p>
+        <form id="teacherAccessForm">
+          <label>Code du CROSS</label>
+          <input id="teacherCodeInput" class="input code-input" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="one-time-code" required />
+          <label>Mon poste</label>
+          <select id="teacherRoleSelect" class="input">
+            <option value="start">Départ</option>
+            <option value="checkpoint">Point de passage</option>
+            <option value="finish">Arrivée</option>
+          </select>
+          <button class="btn primary auth-main-btn" type="submit">Accéder au CROSS</button>
+        </form>
+      </section>
+
+      <div class="auth-separator"><span>Administration</span></div>
+      <form id="adminLoginForm" class="admin-login-form">
+        <label>Compte administrateur</label>
+        <input id="adminEmailInput" class="input" type="email" value="eps.applicationsnico@gmail.com" readonly />
+        <label>Mot de passe</label>
+        <input id="adminPasswordInput" class="input" type="password" autocomplete="current-password" required />
+        <button class="btn primary auth-main-btn" type="submit">Se connecter à l'administration</button>
+      </form>
+      <p class="muted tiny-note">L'administration est réservée au compte organisateur autorisé.</p>
+    </div>
+  </div>
+
+  <dialog id="eventDialog">
+    <form method="dialog" id="eventForm" class="dialog-form event-dialog-form">
+      <h3 id="eventDialogTitle">Nouvelle manifestation</h3>
+      <input type="hidden" id="eventId" />
+
+      <div class="form-grid">
+        <div><label>Nom de la manifestation</label><input id="eventName" class="input" required placeholder="Ex. Cross solidaire" /></div>
+        <div><label>Date</label><input id="eventDate" type="date" class="input" /></div>
+        <div><label>Lieu</label><input id="eventPlace" class="input" placeholder="Ex. Stade..." /></div>
+        <div><label>État</label><select id="eventStatus" class="input"><option>Prévue</option><option>Terminée</option><option>Annulée</option></select></div>
+        <div><label>Organisateur / contact</label><input id="eventContact" class="input" /></div>
+        <div><label>Classes / publics concernés</label><input id="eventAudience" class="input" placeholder="Ex. 6e + écoles primaires" /></div>
+      </div>
+
+      <div>
+        <label>Description / notes</label>
+        <textarea id="eventNotes" class="input event-textarea" rows="4" placeholder="Informations utiles sur l'organisation de la manifestation..."></textarea>
+      </div>
+
+      <div class="event-subsection event-folder-section">
+        <div class="section-head compact">
+          <div>
+            <h4>Documents du dossier</h4>
+            <p class="muted small-note">Ajoutez ici les courriers déjà rédigés, autorisations, plans, tableaux, PDF, Word, Excel, photos, etc.</p>
+          </div>
+        </div>
+
+        <div class="document-import-row">
+          <div>
+            <label>Catégorie des nouveaux documents</label>
+            <select id="eventDocumentCategory" class="input">
+              <option value="Courrier">Courrier</option>
+              <option value="Autorisation">Autorisation</option>
+              <option value="Organisation">Organisation</option>
+              <option value="Plan / parcours">Plan / parcours</option>
+              <option value="Tableau / liste">Tableau / liste</option>
+              <option value="Résultats">Résultats</option>
+              <option value="Photo / image">Photo / image</option>
+              <option value="Autre">Autre</option>
+            </select>
+          </div>
+          <label class="btn secondary file-btn event-add-files-btn">+ Ajouter des documents
+            <input id="eventAttachmentsInput" type="file" multiple hidden />
+          </label>
+        </div>
+
+        <div id="eventAttachmentList" class="attachment-list"></div>
+      </div>
+
+      <div class="dialog-actions">
+        <button value="cancel" class="btn secondary">Annuler</button>
+        <button id="saveEventBtn" value="default" class="btn primary">Enregistrer le dossier</button>
+      </div>
+    </form>
+  </dialog>
+
+<dialog id="studentDialog">
+    <form method="dialog" id="studentForm" class="dialog-form">
+      <h3 id="studentDialogTitle">Ajouter un élève</h3>
+      <input type="hidden" id="studentId" />
+      <div class="form-grid">
+        <div><label>Nom</label><input id="studentLastName" class="input" required /></div>
+        <div><label>Prénom</label><input id="studentFirstName" class="input" required /></div>
+        <div><label>Date de naissance</label><input id="studentBirthDate" type="date" class="input" required /></div>
+        <div><label>Genre</label><select id="studentGender" class="input"><option value="F">Fille</option><option value="M">Garçon</option><option value="X">Autre / non précisé</option></select></div>
+        <div><label>Classe</label><input id="studentClass" class="input" required /></div>
+        <div><label>Dossard</label><input id="studentBib" type="text" inputmode="numeric" pattern="[0-9]*" class="input" placeholder="001" /></div>
+      </div>
+      <div class="dialog-actions"><button value="cancel" class="btn secondary">Annuler</button><button id="saveStudentBtn" value="default" class="btn primary">Enregistrer</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="raceDialog">
+    <form method="dialog" id="raceForm" class="dialog-form">
+      <h3 id="raceDialogTitle">Nouvelle course</h3>
+      <input type="hidden" id="raceId" />
+      <div class="form-grid">
+        <div><label>Nom</label><input id="raceName" class="input" placeholder="Ex. 6e Filles" required /></div>
+        <div><label>Distance (m)</label><input id="raceDistance" type="number" min="1" class="input" required /></div>
+        <div><label>Genre</label><select id="raceGender" class="input"><option value="ALL">Tous</option><option value="F">Filles</option><option value="M">Garçons</option></select></div>
+
+        <div class="full-width">
+          <label>Classes concernées</label>
+          <p class="muted small-note">Cochez une ou plusieurs classes. Exemple : les 6e peuvent être séparées des CM2 même lorsqu'ils sont nés la même année.</p>
+          <div id="raceClassChoices" class="class-choice-grid"></div>
+        </div>
+
+        <div class="birth-range-field">
+          <label>Année de naissance comprise entre</label>
+          <div class="birth-range-row">
+            <input id="raceBirthMin" type="number" class="input" placeholder="2014" />
+            <span class="birth-range-and">et</span>
+            <input id="raceBirthMax" type="number" class="input" placeholder="2016" />
+          </div>
+        </div>
+        <div><label>Premier dossard</label><input id="raceBibStart" type="number" min="1" class="input" placeholder="1" /></div>
+        <div><label>Dernier dossard</label><input id="raceBibEnd" type="number" min="1" class="input" placeholder="99" /></div>
+      </div>
+      <p class="muted">Exemple : 6e filles = 001 à 099 ; 6e garçons = 100 à 199. Les plages de deux courses ne doivent pas se chevaucher.</p>
+      <div>
+        <div class="participant-head">
+          <div>
+            <label>Participants</label>
+            <p class="muted small-note">Les élèves correspondant au genre, aux classes cochées et à l’intervalle d’années sont sélectionnés automatiquement. L’ordre des deux années n’a pas d’importance : 2015 / 2014 est compris comme 2014 à 2015. Vous pouvez ajouter exceptionnellement un autre élève en le cochant.</p>
+          </div>
+          <button type="button" id="applyRaceCriteriaBtn" class="btn secondary">Appliquer les critères</button>
+        </div>
+        <div id="raceParticipants" class="check-list"></div>
+      </div>
+      <div class="dialog-actions"><button value="cancel" class="btn secondary">Annuler</button><button id="saveRaceBtn" value="default" class="btn primary">Enregistrer</button></div>
+    </form>
+  </dialog>
+
+
+  <dialog id="startGroupDialog">
+    <form method="dialog" id="startGroupForm" class="dialog-form">
+      <h3 id="startGroupDialogTitle">Nouveau départ groupé</h3>
+      <input type="hidden" id="startGroupId" />
+      <div>
+        <label>Nom du départ</label>
+        <input id="startGroupName" class="input" placeholder="Ex. 6e + primaire filles" required />
+      </div>
+      <div style="margin-top:14px">
+        <label>Catégories qui partent ensemble</label>
+        <div id="startGroupRaces" class="check-list"></div>
+      </div>
+      <p class="muted">Chaque catégorie conserve sa propre plage de dossards et son propre classement.</p>
+      <div class="dialog-actions">
+        <button value="cancel" class="btn secondary">Annuler</button>
+        <button id="saveStartGroupBtn" value="default" class="btn primary">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="editResultDialog">
+    <form method="dialog" id="editResultForm" class="dialog-form">
+      <h3>Corriger un résultat</h3>
+      <input type="hidden" id="editResultStudentId" />
+      <div><label>Temps en secondes</label><input id="editResultSeconds" type="number" min="0" step="0.1" class="input" /></div>
+      <div class="dialog-actions"><button value="cancel" class="btn secondary">Annuler</button><button id="saveResultBtn" value="default" class="btn primary">Enregistrer</button></div>
+    </form>
+  </dialog>
+
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js?v=19-supabase"></script>
+</body>
+</html>
