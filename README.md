@@ -445,3 +445,12 @@ Avant le premier test :
 4. ouvrir `index.html` avec Live Server.
 
 Cette V19 est destinée au test technique de synchronisation. Avant l'utilisation réelle avec des données d'élèves, les permissions SQL des postes Départ / Passage / Arrivée devront encore être durcies afin de limiter chaque appareil aux seules opérations nécessaires à son rôle.
+
+## V20 — Points multiples, anonymat et QR
+- Plusieurs points de passage configurables dans Paramètres.
+- Chaque poste Point de passage choisit indépendamment son point.
+- Mode anonymat partagé : masquage nom/prénom/classe sur Passage, Arrivée et dossards.
+- QR code sur chaque dossard contenant uniquement l'identifiant technique interne du participant.
+- Scan QR disponible au Point de passage et à l'Arrivée, avec saisie tactile conservée.
+- Compatibilité maintenue avec les anciens passages et la synchronisation `app_state` V19.
+- Aucune migration SQL supplémentaire requise pour cette V20 transitoire.

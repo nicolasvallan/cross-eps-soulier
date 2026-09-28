@@ -224,9 +224,9 @@
               <label>Départ groupé</label>
               <select id="checkpointGroupSelect" class="input"></select>
             </div>
-            <div><label>Nom du point</label><input id="checkpointName" class="input" value="Point 1" /></div>
+            <div><label>Point de passage</label><select id="checkpointPointSelect" class="input"></select></div>
           </div>
-          <div id="checkpointBibs" class="bib-grid"></div>
+          <div class="actions qr-actions"><button type="button" class="btn primary" onclick="openQrScanner('checkpoint')">📷 Scanner un QR code</button><span class="muted">ou touchez directement un numéro de dossard</span></div><div id="checkpointBibs" class="bib-grid"></div>
           <div class="panel soft">
             <h3>Derniers passages</h3>
             <div id="checkpointLog"></div>
@@ -256,7 +256,7 @@
               <select id="finishGroupSelect" class="input"></select>
             </div>
           </div>
-          <div id="finishBibs" class="bib-grid"></div>
+          <div class="actions qr-actions"><button type="button" class="btn primary" onclick="openQrScanner('finish')">📷 Scanner un QR code</button><span class="muted">ou touchez directement un numéro de dossard</span></div><div id="finishBibs" class="bib-grid"></div>
           <div class="panel soft">
             <h3>Dernières arrivées</h3>
             <div id="finishLog"></div>
@@ -498,12 +498,29 @@
             <small id="activeAccessExpiry"></small>
             <p>Les enseignants saisissent ce code puis choisissent leur poste : Départ, Point de passage ou Arrivée.</p>
           </div>
-          <p id="cloudSyncDetails" class="muted small-note">Connexion Firebase en attente.</p>
+          <p id="cloudSyncDetails" class="muted small-note">Connexion Supabase en attente.</p>
+        </div>
+
+
+        <div class="panel">
+          <h3>Points de passage</h3>
+          <p class="muted">Créez autant de postes intermédiaires que nécessaire. Chaque téléphone « Point de passage » choisit ensuite son poste.</p>
+          <div class="form-grid">
+            <div><label>Nouveau point</label><input id="newCheckpointPointName" class="input" placeholder="Ex. 1 km, Passage forêt, Tour 2…"></div>
+            <div class="access-code-actions"><button type="button" id="addCheckpointPointBtn" class="btn primary">Ajouter le point</button></div>
+          </div>
+          <div id="checkpointPointSettingsList"></div>
+        </div>
+
+        <div class="panel">
+          <h3>Confidentialité et anonymat</h3>
+          <label class="privacy-toggle"><input id="anonymousModeToggle" type="checkbox"> <span><strong>Mode anonymat</strong><br><small>Sur Départ/Passage/Arrivée et sur les dossards, masquer nom, prénom et classe. Seuls le numéro et le QR technique sont utilisés.</small></span></label>
+          <p class="muted small-note">Le QR code contient uniquement un identifiant technique aléatoire ; aucune donnée nominative n'est encodée dans le QR.</p>
         </div>
 
         <div class="panel">
           <h3>Sauvegardes</h3>
-          <p>Les données sportives sont synchronisées avec Firestore. Le fichier JSON reste disponible comme sauvegarde de secours. Les fichiers joints aux manifestations restent pour l'instant stockés localement sur l'appareil où ils ont été ajoutés.</p>
+          <p>Les données sportives sont synchronisées avec Supabase. Le fichier JSON reste disponible comme sauvegarde de secours. Les fichiers joints aux manifestations restent pour l'instant stockés localement sur l'appareil où ils ont été ajoutés.</p>
           <div class="actions wrap">
             <button id="downloadBackupBtn" class="btn secondary">Télécharger une sauvegarde JSON</button>
             <label class="btn secondary file-btn">Restaurer une sauvegarde<input id="restoreBackupInput" type="file" accept=".json,application/json" hidden></label>
@@ -695,8 +712,19 @@
     </form>
   </dialog>
 
+
+  <dialog id="qrScannerDialog" class="qr-dialog">
+    <div class="dialog-form">
+      <div class="section-head compact"><h3>Scanner un dossard</h3><button type="button" class="btn secondary" onclick="closeQrScanner()">Fermer</button></div>
+      <div id="qrReader"></div>
+      <p id="qrScannerStatus" class="muted">Initialisation de la caméra…</p>
+    </div>
+  </dialog>
+
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=19-supabase"></script>
+  <script src="app.js?v=20-multipoints-qr"></script>
 </body>
 </html>

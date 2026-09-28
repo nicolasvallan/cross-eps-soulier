@@ -274,3 +274,11 @@ dialog::backdrop{background:rgba(15,23,42,.45)}
 .admin-login-form .auth-main-btn{
   margin-top:4px;
 }
+
+
+/* V20 — points multiples, anonymat et QR */
+.qr-actions{align-items:center;margin-top:14px;gap:10px;flex-wrap:wrap}
+.qr-dialog{width:min(94vw,520px);border:0;border-radius:16px;padding:0}.qr-dialog::backdrop{background:#0f172a99}.qr-dialog .dialog-form{padding:18px}
+#qrReader{width:100%;min-height:260px;margin-top:12px}.privacy-toggle{display:flex;gap:10px;align-items:flex-start}.privacy-toggle input{margin-top:4px;transform:scale(1.25)}
+.bib-qr{display:flex;justify-content:center;align-items:center;margin:2px auto 6px}.bib-qr svg{width:82px;height:82px}.bib-anonymous{font-size:.9rem;color:#64748b}
+@media print{.bib-qr svg{width:24mm;height:24mm}}

@@ -36,7 +36,7 @@ let workspaceMeta = {
 };
 
 function defaultState(){
-  return {students:[], races:[], checkpoints:[], startGroups:[], events:[], resultArchives:[]};
+  return {students:[], races:[], checkpoints:[], checkpointPoints:[{id:"cp_point_1",name:"Point 1"}], settings:{anonymousMode:false}, startGroups:[], events:[], resultArchives:[]};
 }
 function normalizeState(value){
   const s=(value && typeof value==="object")?value:{};
@@ -44,6 +44,8 @@ function normalizeState(value){
     students:Array.isArray(s.students)?s.students:[],
     races:Array.isArray(s.races)?s.races:[],
     checkpoints:Array.isArray(s.checkpoints)?s.checkpoints:[],
+    checkpointPoints:Array.isArray(s.checkpointPoints)&&s.checkpointPoints.length?s.checkpointPoints:[{id:"cp_point_1",name:"Point 1"}],
+    settings:{anonymousMode:!!s.settings?.anonymousMode},
     startGroups:Array.isArray(s.startGroups)?s.startGroups:[],
     events:Array.isArray(s.events)?s.events:[],
     resultArchives:Array.isArray(s.resultArchives)?s.resultArchives:[]
@@ -683,7 +685,7 @@ function syncAllRaceParticipants(){
 
 function renderAll(){
   syncAllRaceParticipants();
-  renderDashboard(); renderStudents(); renderRaces(); renderStartGroups(); fillRaceSelects(); fillStartGroupSelects(); renderParticipantStatus(); renderCheckpoint(); renderFinish(); renderResults(); renderTimer(); renderBibs(); renderEvents();
+  renderDashboard(); renderStudents(); renderRaces(); renderStartGroups(); fillRaceSelects(); fillStartGroupSelects(); renderParticipantStatus(); renderCheckpoint(); renderFinish(); renderResults(); renderTimer(); renderBibs(); renderEvents(); fillCheckpointPointSelect(); renderCheckpointPointSettings();
 }
 function renderDashboard(){
   const allRunning=state.races.filter(r=>r.startedAt&&!r.stoppedAt).length + (state.startGroups||[]).filter(g=>g.startedAt&&!g.stoppedAt).length;
@@ -1174,9 +1176,9 @@ function fillRaceSelects(){
 resultsRaceSelect.addEventListener("change",renderResults);
 document.getElementById("resultsClassSelect").addEventListener("change",renderResults);
 ["timingGroupSelect","finishGroupSelect","checkpointGroupSelect","statusGroupSelect","resultsGroupSelect"].forEach(id=>document.getElementById(id)?.addEventListener("change",()=>renderAll()));
-checkpointName.addEventListener("input",renderCheckpoint);
+
 ["timingGroupSelect","finishGroupSelect","checkpointGroupSelect","statusGroupSelect","resultsGroupSelect"].forEach(id=>document.getElementById(id)?.addEventListener("change",()=>renderAll()));
-checkpointName.addEventListener("input",renderCheckpoint);
+
 
 function updateTimingModeUI(){
   const group=timingModeSelect.value==="group";
@@ -1286,6 +1288,26 @@ checkpointModeSelect.addEventListener("change",()=>{
 });
 checkpointGroupSelect.addEventListener("change",renderCheckpoint);
 
+function isAnonymousMode(){return !!state.settings?.anonymousMode;}
+function checkpointPointById(id){return (state.checkpointPoints||[]).find(p=>p.id===id);}
+function selectedCheckpointPoint(){return checkpointPointById(document.getElementById("checkpointPointSelect")?.value)||(state.checkpointPoints||[])[0]||{id:"cp_point_1",name:"Point 1"};}
+function fillCheckpointPointSelect(){
+  const sel=document.getElementById("checkpointPointSelect"); if(!sel)return;
+  const old=sel.value;
+  sel.innerHTML=(state.checkpointPoints||[]).map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
+  if((state.checkpointPoints||[]).some(p=>p.id===old))sel.value=old;
+}
+function renderCheckpointPointSettings(){
+  const list=document.getElementById("checkpointPointSettingsList"); if(!list)return;
+  list.innerHTML=(state.checkpointPoints||[]).map((p,i)=>`<div class="log-row"><span><strong>${esc(p.name)}</strong></span><span><button class="btn secondary" onclick="renameCheckpointPoint('${p.id}')">Renommer</button> <button class="btn danger" onclick="deleteCheckpointPoint('${p.id}')" ${state.checkpointPoints.length<=1?'disabled':''}>Supprimer</button></span></div>`).join("");
+  const anon=document.getElementById("anonymousModeToggle"); if(anon)anon.checked=isAnonymousMode();
+}
+window.addCheckpointPoint=()=>{const input=document.getElementById("newCheckpointPointName");const name=input?.value.trim();if(!name)return;state.checkpointPoints=state.checkpointPoints||[];state.checkpointPoints.push({id:uid("point"),name});input.value="";save();};
+window.renameCheckpointPoint=id=>{const p=checkpointPointById(id);if(!p)return;const name=prompt("Nouveau nom du point de passage :",p.name);if(!name?.trim())return;p.name=name.trim();save();};
+window.deleteCheckpointPoint=id=>{if((state.checkpointPoints||[]).length<=1)return;const p=checkpointPointById(id);if(!p||!confirm(`Supprimer le point « ${p.name} » de la configuration ? Les passages déjà enregistrés restent conservés.`))return;state.checkpointPoints=state.checkpointPoints.filter(x=>x.id!==id);save();};
+function operationalStudentLabel(s){return isAnonymousMode()?"":`<small>${esc(s.lastName)} ${esc(s.firstName)}</small>`;}
+function qrPayload(s){return `CROSS-EPS:${s.id}`;}
+function qrSvg(s,cellSize=3){try{if(typeof qrcode!=="function")return "";const qr=qrcode(0,"M");qr.addData(qrPayload(s));qr.make();return qr.createSvgTag(cellSize,0);}catch(e){console.error("QR",e);return "";}}
 function selectedCheckpointRaces(){
   if(checkpointModeSelect.value==="group"){
     const g=startGroupById(checkpointGroupSelect.value);
@@ -1307,13 +1329,15 @@ function renderCheckpoint(){
     return;
   }
 
-  const cpName=(checkpointName.value.trim()||"Point");
+  fillCheckpointPointSelect();
+  const cp=selectedCheckpointPoint();
+  const cpName=cp.name;
   const pending=[];
 
   races.forEach(r=>{
     const passedIds=new Set(
       state.checkpoints
-        .filter(c=>c.raceId===r.id && (c.name||"Point")===cpName)
+        .filter(c=>c.raceId===r.id && ((c.pointId&&c.pointId===cp.id)||(!c.pointId&&(c.name||"Point")===cpName)))
         .map(c=>c.studentId)
     );
 
@@ -1330,21 +1354,21 @@ function renderCheckpoint(){
   wrap.innerHTML=pending.map(x=>`
     <button class="bib-btn" onclick="markCheckpoint('${x.race.id}','${x.student.id}')">
       ${esc(x.student.bib!=null?formatBib(x.student.bib):"?")}
-      <small>${esc(x.student.lastName)} ${esc(x.student.firstName)}</small>
+      ${operationalStudentLabel(x.student)}
       ${races.length>1?`<small>${esc(x.race.name)}</small>`:""}
     </button>
   `).join("") || '<p class="muted">Tous les participants ont été enregistrés à ce point de passage.</p>';
 
   const raceIds=new Set(races.map(r=>r.id));
   const passages=state.checkpoints
-    .filter(c=>raceIds.has(c.raceId) && (c.name||"Point")===cpName)
+    .filter(c=>raceIds.has(c.raceId) && ((c.pointId&&c.pointId===cp.id)||(!c.pointId&&(c.name||"Point")===cpName)))
     .sort((a,b)=>b.createdAt-a.createdAt);
 
   log.innerHTML=passages.map(c=>{
     const s=studentById(c.studentId);
     const r=raceById(c.raceId);
     return `<div class="log-row">
-      <span>Dossard ${esc(s?.bib!=null?formatBib(s.bib):"?")} · ${esc(s?.lastName||"")} ${esc(s?.firstName||"")}${races.length>1?` · ${esc(r?.name||"")}`:""}</span>
+      <span>Dossard ${esc(s?.bib!=null?formatBib(s.bib):"?")}${isAnonymousMode()?"":` · ${esc(s?.lastName||"")} ${esc(s?.firstName||"")}`}${races.length>1?` · ${esc(r?.name||"")}`:""}</span>
       <span>
         <strong>${formatTime(c.seconds)}</strong>
         <button class="btn secondary" onclick="undoCheckpoint('${c.id}')">Réintégrer</button>
@@ -1364,9 +1388,10 @@ window.markCheckpoint=(raceId,sid)=>{
     return;
   }
 
-  const cpName=checkpointName.value.trim()||"Point";
+  const cp=selectedCheckpointPoint();
+  const cpName=cp.name;
   const alreadyPassed=state.checkpoints.some(
-    c=>c.raceId===raceId && c.studentId===sid && (c.name||"Point")===cpName
+    c=>c.raceId===raceId && c.studentId===sid && ((c.pointId&&c.pointId===cp.id)||(!c.pointId&&(c.name||"Point")===cpName))
   );
   if(alreadyPassed){
     alert("Ce dossard a déjà été enregistré à ce point de passage.");
@@ -1378,6 +1403,7 @@ window.markCheckpoint=(raceId,sid)=>{
     id:uid("cp"),
     raceId,
     studentId:sid,
+    pointId:cp.id,
     name:cpName,
     seconds,
     createdAt:Date.now()
@@ -1394,6 +1420,47 @@ window.undoCheckpoint=id=>{
   state.checkpoints=state.checkpoints.filter(c=>c.id!==id);
   save();
 };
+
+
+let qrScanner=null;
+let qrScanContext=null;
+async function openQrScanner(context){
+  qrScanContext=context;
+  const dialog=document.getElementById("qrScannerDialog");
+  if(!dialog)return;
+  dialog.showModal();
+  const status=document.getElementById("qrScannerStatus");
+  if(typeof Html5Qrcode!=="function"){status.textContent="Le lecteur QR n'est pas disponible. Utilisez les boutons de dossard.";return;}
+  try{
+    qrScanner=new Html5Qrcode("qrReader");
+    await qrScanner.start({facingMode:"environment"},{fps:10,qrbox:{width:220,height:220}},decoded=>handleQrDecoded(decoded),()=>{});
+    status.textContent="Présentez le QR code du dossard devant la caméra.";
+  }catch(err){console.error("Scanner QR",err);status.textContent="Caméra indisponible. Autorisez l'accès à la caméra ou utilisez les boutons.";}
+}
+async function closeQrScanner(){
+  try{if(qrScanner?.isScanning)await qrScanner.stop();}catch(e){}
+  try{qrScanner?.clear();}catch(e){}
+  qrScanner=null;qrScanContext=null;
+  const d=document.getElementById("qrScannerDialog");if(d?.open)d.close();
+}
+async function handleQrDecoded(decoded){
+  const token=String(decoded||"").replace(/^CROSS-EPS:/,"");
+  const s=state.students.find(x=>x.id===token);
+  if(!s){document.getElementById("qrScannerStatus").textContent="QR code non reconnu.";return;}
+  if(qrScanContext==="checkpoint"){
+    const r=selectedCheckpointRaces().find(r=>(r.participantIds||[]).includes(s.id)&&!participantIsWithdrawn(r,s.id));
+    if(!r){document.getElementById("qrScannerStatus").textContent="Ce dossard n'appartient pas à la course sélectionnée.";return;}
+    await closeQrScanner();markCheckpoint(r.id,s.id);return;
+  }
+  if(qrScanContext==="finish"){
+    let races=[];
+    if(finishModeSelect.value==="group"){const g=startGroupById(finishGroupSelect.value);races=g?(g.raceIds||[]).map(raceById).filter(Boolean):[];}else{const r=raceById(finishRaceSelect.value);if(r)races=[r];}
+    const r=races.find(r=>(r.participantIds||[]).includes(s.id)&&!participantIsWithdrawn(r,s.id)&&resultFor(r,s.id)?.finishSeconds==null);
+    if(!r){document.getElementById("qrScannerStatus").textContent="Dossard non disponible à l'arrivée sélectionnée.";return;}
+    await closeQrScanner();finishStudent(r.id,s.id);return;
+  }
+}
+window.openQrScanner=openQrScanner; window.closeQrScanner=closeQrScanner;
 
 // =======================
 // NON-PARTANTS / ABANDONS
@@ -1571,7 +1638,7 @@ function renderFinish(){
 
     wrap.innerHTML=pending.map(x=>`<button class="bib-btn" onclick="finishStudent('${x.race.id}','${x.student.id}')">
       ${esc(x.student.bib!=null?formatBib(x.student.bib):"?")}
-      <small>${esc(x.student.lastName)} ${esc(x.student.firstName)}</small>
+      ${operationalStudentLabel(x.student)}
       <small>${esc(x.race.name)}</small>
     </button>`).join("") || '<p class="muted">Tous les participants ont une arrivée enregistrée.</p>';
 
@@ -1582,7 +1649,7 @@ function renderFinish(){
     finished.sort((a,b)=>b.sec-a.sec);
 
     finishLog.innerHTML=finished.slice(0,12).map(x=>`<div class="log-row">
-      <span>Dossard ${esc(formatBib(x.student.bib))} · ${esc(x.student.lastName)} ${esc(x.student.firstName)} · ${esc(x.race.name)}</span>
+      <span>Dossard ${esc(formatBib(x.student.bib))}${isAnonymousMode()?"":` · ${esc(x.student.lastName)} ${esc(x.student.firstName)}`} · ${esc(x.race.name)}</span>
       <span><strong>${formatTime(x.sec)}</strong> <button class="btn secondary" onclick="undoFinish('${x.race.id}','${x.student.id}')">Réintégrer</button></span>
     </div>`).join("") || '<span class="muted">Aucune arrivée enregistrée.</span>';
     return;
@@ -1591,9 +1658,9 @@ function renderFinish(){
   const r=raceById(finishRaceSelect.value);
   if(!r){wrap.innerHTML='<p class="muted">Choisissez une course.</p>';finishLog.innerHTML="";return;}
   const pending=(r.participantIds||[]).map(studentById).filter(Boolean).filter(s=>!participantIsWithdrawn(r,s.id)).filter(s=>resultFor(r,s.id)?.finishSeconds==null).sort((a,b)=>(a.bib||99999)-(b.bib||99999));
-  wrap.innerHTML=pending.map(s=>`<button class="bib-btn" onclick="finishStudent('${r.id}','${s.id}')">${esc(s.bib!=null?formatBib(s.bib):"?")}<small>${esc(s.lastName)} ${esc(s.firstName)}</small></button>`).join("") || '<p class="muted">Tous les participants ont une arrivée enregistrée.</p>';
+  wrap.innerHTML=pending.map(s=>`<button class="bib-btn" onclick="finishStudent('${r.id}','${s.id}')">${esc(s.bib!=null?formatBib(s.bib):"?")}${operationalStudentLabel(s)}</button>`).join("") || '<p class="muted">Tous les participants ont une arrivée enregistrée.</p>';
   const finished=sortedFinishers(r).slice().reverse().slice(0,12);
-  finishLog.innerHTML=finished.map(s=>`<div class="log-row"><span>Dossard ${esc(s.bib!=null?formatBib(s.bib):"?")} · ${esc(s.lastName)} ${esc(s.firstName)}</span><span><strong>${formatTime(resultFor(r,s.id).finishSeconds)}</strong> <button class="btn secondary" onclick="undoFinish('${r.id}','${s.id}')">Réintégrer</button></span></div>`).join("")||'<span class="muted">Aucune arrivée enregistrée.</span>';
+  finishLog.innerHTML=finished.map(s=>`<div class="log-row"><span>Dossard ${esc(s.bib!=null?formatBib(s.bib):"?")}${isAnonymousMode()?"":` · ${esc(s.lastName)} ${esc(s.firstName)}`}</span><span><strong>${formatTime(resultFor(r,s.id).finishSeconds)}</strong> <button class="btn secondary" onclick="undoFinish('${r.id}','${s.id}')">Réintégrer</button></span></div>`).join("")||'<span class="muted">Aucune arrivée enregistrée.</span>';
 }
 
 window.finishStudent=(raceId,sid)=>{
@@ -1981,9 +2048,9 @@ function bibCardHTML(student,race,prefs){
       <div class="bib-brand right">${charityLogo}</div>
     </div>
     <div class="bib-number">${esc(formatBib(student.bib))}</div>
+    <div class="bib-qr" aria-label="QR code du dossard">${qrSvg(student,3)}</div>
     <div class="bib-separator"></div>
-    <div class="bib-student">${esc(student.lastName)} ${esc(student.firstName)}</div>
-    <div class="bib-class">${esc(student.className)}</div>
+    ${isAnonymousMode()?'<div class="bib-student bib-anonymous">Dossard anonyme</div>':`<div class="bib-student">${esc(student.lastName)} ${esc(student.firstName)}</div><div class="bib-class">${esc(student.className)}</div>`}
     <div class="bib-charity">${esc(charityText)}</div>
   </article>`;
 }
@@ -2027,6 +2094,7 @@ document.getElementById("printBibsBtn").onclick=()=>{
     .bib-logo-placeholder{border:1px dashed #888;font-size:8pt;display:flex;align-items:center;justify-content:center;text-align:center;color:#666}.bib-logo-placeholder.bib-school-logo{width:calc(25mm * var(--bib-school-logo-scale,1));height:calc(16mm * var(--bib-school-logo-scale,1))}.bib-logo-placeholder.bib-charity-logo{width:calc(25mm * var(--bib-charity-logo-scale,1));height:calc(16mm * var(--bib-charity-logo-scale,1))}
     .bib-race{text-align:center;font-size:calc(13pt * var(--bib-race-scale,1))}.bib-race span{display:block;margin-top:2mm;color:#0f766e;font-weight:700}
     .bib-number{text-align:center;font-size:calc(72pt * var(--bib-number-scale,1));line-height:.9;font-weight:900;margin:8mm 0 3mm}
+    .bib-qr{display:flex;justify-content:center;align-items:center;margin:0 auto 2mm}.bib-qr svg{width:24mm;height:24mm}.bib-anonymous{text-align:center;color:#666;font-size:10pt}
     .bib-separator{border-top:.5mm solid #0f766e;margin:0 8mm 4mm}
     .bib-student{text-align:center;font-size:calc(19pt * var(--bib-student-scale,1));font-weight:800}
     .bib-class{text-align:center;font-size:calc(14pt * var(--bib-class-scale,1));font-weight:700;margin-top:1mm}
@@ -2036,6 +2104,12 @@ document.getElementById("printBibsBtn").onclick=()=>{
   w.document.close();w.focus();setTimeout(()=>w.print(),300);
 };
 
+
+
+const anonToggle=document.getElementById("anonymousModeToggle");
+if(anonToggle)anonToggle.addEventListener("change",e=>{state.settings=state.settings||{};state.settings.anonymousMode=!!e.target.checked;save();});
+const addPointBtn=document.getElementById("addCheckpointPointBtn");if(addPointBtn)addPointBtn.addEventListener("click",addCheckpointPoint);
+const cpPointSel=document.getElementById("checkpointPointSelect");if(cpPointSel)cpPointSel.addEventListener("change",renderCheckpoint);
 
 // =======================
 // MANIFESTATIONS / ARCHIVES
