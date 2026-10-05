@@ -45,7 +45,7 @@ function normalizeState(value){
     races:Array.isArray(s.races)?s.races:[],
     checkpoints:Array.isArray(s.checkpoints)?s.checkpoints:[],
     checkpointPoints:Array.isArray(s.checkpointPoints)&&s.checkpointPoints.length?s.checkpointPoints:[{id:"cp_point_1",name:"Point 1"}],
-    settings:{...(s.settings||{}), anonymousMode:!!s.settings?.anonymousMode},
+    settings:{...(s.settings||{}),anonymousMode:!!s.settings?.anonymousMode},
     startGroups:Array.isArray(s.startGroups)?s.startGroups:[],
     events:Array.isArray(s.events)?s.events:[],
     resultArchives:Array.isArray(s.resultArchives)?s.resultArchives:[]
@@ -1991,22 +1991,22 @@ function slug(s){return String(s).toLowerCase().normalize("NFD").replace(/\p{Dia
 
 const BIB_BACKGROUND_PRESETS=[
   {id:"none",name:"Aucun fond",src:""},
-  {id:"piste",name:"Piste",src:"backgrounds/piste.svg"},
-  {id:"nature",name:"Nature",src:"backgrounds/nature.svg"},
-  {id:"montagne",name:"Montagne",src:"backgrounds/montagne.svg"},
-  {id:"dynamique",name:"Dynamique",src:"backgrounds/dynamique.svg"},
-  {id:"bois",name:"Bois",src:"backgrounds/bois.svg"},
-  {id:"empreintes",name:"Empreintes",src:"backgrounds/empreintes.svg"},
-  {id:"vagues",name:"Vagues",src:"backgrounds/vagues.svg"},
-  {id:"automne",name:"Automne",src:"backgrounds/automne.svg"},
-  {id:"collines",name:"Collines",src:"backgrounds/collines.svg"},
-  {id:"minimaliste",name:"Minimaliste",src:"backgrounds/minimaliste.svg"},
-  {id:"sport",name:"Sport",src:"backgrounds/sport.svg"},
-  {id:"colore",name:"Coloré",src:"backgrounds/colore.svg"}
+  {id:"piste",name:"Piste",src:"backgrounds/piste.jpg"},
+  {id:"nature",name:"Nature",src:"backgrounds/nature.jpg"},
+  {id:"montagne",name:"Montagne",src:"backgrounds/montagne.jpg"},
+  {id:"dynamique",name:"Dynamique",src:"backgrounds/dynamique.jpg"},
+  {id:"bois",name:"Bois",src:"backgrounds/bois.jpg"},
+  {id:"empreintes",name:"Empreintes",src:"backgrounds/empreintes.jpg"},
+  {id:"vagues",name:"Vagues",src:"backgrounds/vagues.jpg"},
+  {id:"automne",name:"Automne",src:"backgrounds/automne.jpg"},
+  {id:"collines",name:"Collines",src:"backgrounds/collines.jpg"},
+  {id:"minimaliste",name:"Minimaliste",src:"backgrounds/minimaliste.jpg"},
+  {id:"sport",name:"Sport",src:"backgrounds/sport.jpg"},
+  {id:"colore",name:"Coloré",src:"backgrounds/colore.jpg"}
 ];
 function bibDesign(){
   state.settings=state.settings||{};
-  state.settings.bibDesign=state.settings.bibDesign||{backgroundId:"none",backgroundOpacity:35,customBackground:""};
+  state.settings.bibDesign={backgroundId:"none",backgroundOpacity:35,customBackground:"",...(state.settings.bibDesign||{})};
   return state.settings.bibDesign;
 }
 function bibBackgroundSource(){
@@ -2044,20 +2044,8 @@ const BIB_SIZE_DEFAULTS={
   bibCharityLogoScale:100,
   bibQrScale:100
 };
-function loadBibPrefs(){
-  try{
-    const local=JSON.parse(localStorage.getItem(BIB_PREFS_KEY))||{};
-    const cloud=state.settings?.bibPrefs||{};
-    return {...local,...cloud};
-  }catch{return state.settings?.bibPrefs||{};}
-}
-function saveBibPrefs(p){
-  localStorage.setItem(BIB_PREFS_KEY,JSON.stringify(p));
-  state.settings=state.settings||{};
-  state.settings.bibPrefs={...p};
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  if(canUseCloud() && !applyingCloudSnapshot) queueCloudSave();
-}
+function loadBibPrefs(){try{return JSON.parse(localStorage.getItem(BIB_PREFS_KEY))||{};}catch{return {};}}
+function saveBibPrefs(p){localStorage.setItem(BIB_PREFS_KEY,JSON.stringify(p));}
 function bibSizeValue(prefs,key){
   const n=Number(prefs?.[key]);
   return Number.isFinite(n)?n:BIB_SIZE_DEFAULTS[key];
