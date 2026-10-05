@@ -373,7 +373,30 @@
             <div class="panel">
               <div class="section-head compact">
                 <div>
-                  <h3>3. Taille des éléments</h3>
+                  <h3>3. Fond du dossard</h3>
+                  <p class="muted small-note">Choisissez un fond de la bibliothèque, aucun fond, ou ajoutez votre propre image. Le choix est synchronisé avec l’événement.</p>
+                </div>
+              </div>
+              <div id="bibBackgroundGallery" class="bib-background-gallery"></div>
+              <div class="form-grid bib-background-tools">
+                <div>
+                  <label>Ajouter un fond personnalisé</label>
+                  <input id="bibBackgroundInput" class="input" type="file" accept="image/*" />
+                </div>
+                <label class="bib-size-control">
+                  <span>Opacité du fond <strong id="bibBackgroundOpacityValue">35 %</strong></span>
+                  <input id="bibBackgroundOpacity" type="range" min="10" max="100" step="5" value="35" />
+                </label>
+              </div>
+              <div class="actions">
+                <button type="button" id="removeCustomBibBackgroundBtn" class="btn secondary">Supprimer le fond personnalisé</button>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="section-head compact">
+                <div>
+                  <h3>4. Taille des éléments</h3>
                   <p class="muted small-note">Chaque élément peut être agrandi ou réduit indépendamment. L'aperçu et le PDF utilisent les mêmes réglages.</p>
                 </div>
                 <button type="button" id="resetBibSizesBtn" class="btn secondary">Tailles par défaut</button>
@@ -423,7 +446,7 @@
             </div>
 
             <div class="panel">
-              <h3>4. Format</h3>
+              <h3>5. Format</h3>
               <p><strong>A5 (148 × 210 mm)</strong> — 2 dossards par feuille A4 portrait.</p>
               <p class="muted">Le bouton PDF ouvre l'impression : choisissez « Enregistrer au format PDF », papier A4 et échelle 100 %.</p>
             </div>
@@ -727,6 +750,6 @@
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20-qr-continu"></script>
+  <script src="app.js?v=20-bib-backgrounds"></script>
 </body>
 </html>

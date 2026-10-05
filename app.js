@@ -1989,6 +1989,49 @@ function downloadBlob(content,name,type){const blob=new Blob([content],{type});c
 function slug(s){return String(s).toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu,"").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");}
 
 
+const BIB_BACKGROUND_PRESETS=[
+  {id:"none",name:"Aucun fond",src:""},
+  {id:"piste",name:"Piste",src:"backgrounds/piste.svg"},
+  {id:"nature",name:"Nature",src:"backgrounds/nature.svg"},
+  {id:"montagne",name:"Montagne",src:"backgrounds/montagne.svg"},
+  {id:"dynamique",name:"Dynamique",src:"backgrounds/dynamique.svg"},
+  {id:"bois",name:"Bois",src:"backgrounds/bois.svg"},
+  {id:"empreintes",name:"Empreintes",src:"backgrounds/empreintes.svg"},
+  {id:"vagues",name:"Vagues",src:"backgrounds/vagues.svg"},
+  {id:"automne",name:"Automne",src:"backgrounds/automne.svg"},
+  {id:"collines",name:"Collines",src:"backgrounds/collines.svg"},
+  {id:"minimaliste",name:"Minimaliste",src:"backgrounds/minimaliste.svg"},
+  {id:"sport",name:"Sport",src:"backgrounds/sport.svg"},
+  {id:"colore",name:"Coloré",src:"backgrounds/colore.svg"}
+];
+function bibDesign(){
+  state.settings=state.settings||{};
+  state.settings.bibDesign=state.settings.bibDesign||{backgroundId:"none",backgroundOpacity:35,customBackground:""};
+  return state.settings.bibDesign;
+}
+function bibBackgroundSource(){
+  const d=bibDesign();
+  if(d.backgroundId==="custom")return d.customBackground||"";
+  return BIB_BACKGROUND_PRESETS.find(x=>x.id===d.backgroundId)?.src||"";
+}
+function bibBackgroundHTML(){
+  const src=bibBackgroundSource();
+  if(!src)return "";
+  const opacity=Math.max(.1,Math.min(1,(Number(bibDesign().backgroundOpacity)||35)/100));
+  return `<img class="bib-background" src="${src}" alt="" style="opacity:${opacity}">`;
+}
+function renderBibBackgroundGallery(){
+  const wrap=document.getElementById("bibBackgroundGallery"); if(!wrap)return;
+  const d=bibDesign();
+  const entries=[...BIB_BACKGROUND_PRESETS];
+  if(d.customBackground)entries.push({id:"custom",name:"Mon fond",src:d.customBackground});
+  wrap.innerHTML=entries.map(x=>`<button type="button" class="bib-background-choice ${d.backgroundId===x.id?"selected":""}" data-bg-id="${x.id}">${x.src?`<img src="${x.src}" alt="">`:`<span class="no-bg-mark">∅</span>`}<strong>${x.name}</strong></button>`).join("");
+  wrap.querySelectorAll("[data-bg-id]").forEach(btn=>btn.addEventListener("click",()=>{bibDesign().backgroundId=btn.dataset.bgId;save();renderBibBackgroundGallery();renderBibs();}));
+  const op=document.getElementById("bibBackgroundOpacity"), val=document.getElementById("bibBackgroundOpacityValue");
+  if(op){op.value=Number(d.backgroundOpacity)||35;if(val)val.textContent=`${op.value} %`;}
+}
+function resizeImageToDataURL(file,maxW=1600,maxH=1200){return new Promise((resolve,reject)=>{const img=new Image(),url=URL.createObjectURL(file);img.onload=()=>{let w=img.naturalWidth,h=img.naturalHeight,scale=Math.min(1,maxW/w,maxH/h);w=Math.round(w*scale);h=Math.round(h*scale);const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);URL.revokeObjectURL(url);resolve(c.toDataURL("image/jpeg",.82));};img.onerror=e=>{URL.revokeObjectURL(url);reject(e)};img.src=url;});}
+
 const BIB_PREFS_KEY="crossEPS_bibPrefs_v1";
 const BIB_SIZE_DEFAULTS={
   bibNumberScale:100,
@@ -2067,6 +2110,9 @@ document.getElementById("removeSchoolLogoBtn").addEventListener("click",()=>remo
 document.getElementById("removeCharityLogoBtn").addEventListener("click",()=>removeBibLogo("charityLogo","charityLogoInput"));
 document.getElementById("schoolNameInput").addEventListener("input",e=>{const p=loadBibPrefs();p.schoolName=e.target.value;saveBibPrefs(p);renderBibs();});
 document.getElementById("charityTextInput").addEventListener("input",e=>{const p=loadBibPrefs();p.charityText=e.target.value;saveBibPrefs(p);renderBibs();});
+document.getElementById("bibBackgroundOpacity")?.addEventListener("input",e=>{const d=bibDesign();d.backgroundOpacity=Number(e.target.value);const v=document.getElementById("bibBackgroundOpacityValue");if(v)v.textContent=`${e.target.value} %`;save();renderBibs();});
+document.getElementById("bibBackgroundInput")?.addEventListener("change",async e=>{const file=e.target.files?.[0];if(!file)return;try{const d=bibDesign();d.customBackground=await resizeImageToDataURL(file);d.backgroundId="custom";save();renderBibBackgroundGallery();renderBibs();}catch(err){console.error(err);alert("Impossible de charger cette image.");}e.target.value="";});
+document.getElementById("removeCustomBibBackgroundBtn")?.addEventListener("click",()=>{const d=bibDesign();if(!d.customBackground){alert("Aucun fond personnalisé n’est enregistré.");return;}if(!confirm("Supprimer le fond personnalisé de la bibliothèque ?"))return;d.customBackground="";if(d.backgroundId==="custom")d.backgroundId="none";save();renderBibBackgroundGallery();renderBibs();});
 
 function bibCardHTML(student,race,prefs){
   const schoolName=prefs.schoolName||"Collège Jean-Jacques Soulier – Montluçon";
@@ -2074,6 +2120,8 @@ function bibCardHTML(student,race,prefs){
   const schoolLogo=prefs.schoolLogo?`<img class="bib-logo bib-school-logo" src="${prefs.schoolLogo}" alt="Logo collège">`:``;
   const charityLogo=prefs.charityLogo?`<img class="bib-logo bib-charity-logo" src="${prefs.charityLogo}" alt="Logo association">`:``;
   return `<article class="print-bib" style="${bibInlineVars(prefs)}">
+    ${bibBackgroundHTML()}
+    <div class="bib-content">
     <div class="bib-top">
       <div class="bib-brand">${schoolLogo}<span>${esc(schoolName)}</span></div>
       <div class="bib-race"><strong>${esc(race.name)}</strong><span>${esc(race.distance)} m</span></div>
@@ -2084,6 +2132,7 @@ function bibCardHTML(student,race,prefs){
     <div class="bib-separator"></div>
     ${isAnonymousMode()?'<div class="bib-student bib-anonymous">Dossard anonyme</div>':`<div class="bib-student">${esc(student.lastName)} ${esc(student.firstName)}</div><div class="bib-class">${esc(student.className)}</div>`}
     <div class="bib-charity">${esc(charityText)}</div>
+    </div>
   </article>`;
 }
 function renderBibs(){
@@ -2092,6 +2141,7 @@ function renderBibs(){
   if(!select||!preview)return;
   const prefs=loadBibPrefs();
   syncBibSizeControls();
+  renderBibBackgroundGallery();
   schoolNameInput.value=prefs.schoolName||"Collège Jean-Jacques Soulier – Montluçon";
   charityTextInput.value=prefs.charityText||"Course caritative au profit de Vaincre la Mucoviscidose";
   const r=raceById(select.value);
@@ -2119,7 +2169,7 @@ document.getElementById("printBibsBtn").onclick=()=>{
     body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#111}
     .print-page{width:210mm;height:297mm;page-break-after:always;display:flex;flex-direction:column}
     .print-page:last-child{page-break-after:auto}
-    .print-bib{width:210mm;height:148.5mm;padding:10mm 12mm;border:1.2mm solid #0f766e;display:flex;flex-direction:column}
+    .print-bib{width:210mm;height:148.5mm;padding:10mm 12mm;border:1.2mm solid #0f766e;display:flex;flex-direction:column;position:relative;overflow:hidden;background:#fff}.bib-background{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}.bib-content{position:relative;z-index:1;display:flex;flex-direction:column;height:100%}
     .bib-top{display:grid;grid-template-columns:1fr 1.2fr 1fr;align-items:start;gap:6mm}
     .bib-brand{display:flex;gap:4mm;align-items:center;font-size:calc(11pt * var(--bib-school-scale,1));font-weight:700}.bib-brand.right{justify-content:flex-end}
     .bib-logo{object-fit:contain}.bib-school-logo{max-width:calc(28mm * var(--bib-school-logo-scale,1));max-height:calc(18mm * var(--bib-school-logo-scale,1))}.bib-charity-logo{max-width:calc(28mm * var(--bib-charity-logo-scale,1));max-height:calc(18mm * var(--bib-charity-logo-scale,1))}
