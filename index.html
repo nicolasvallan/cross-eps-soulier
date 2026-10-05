@@ -396,7 +396,7 @@
             <div class="panel">
               <div class="section-head compact">
                 <div>
-                  <h3>4. Taille des éléments</h3>
+                  <h3>4. Taille des éléments — QR code inclus</h3>
                   <p class="muted small-note">Chaque élément peut être agrandi ou réduit indépendamment. L'aperçu et le PDF utilisent les mêmes réglages.</p>
                 </div>
                 <button type="button" id="resetBibSizesBtn" class="btn secondary">Tailles par défaut</button>
@@ -444,8 +444,8 @@
                 </label>
 
                 <label class="bib-size-control">
-                  <span>QR code <strong id="bibQrScaleValue">100 %</strong></span>
-                  <input id="bibQrScale" type="range" min="60" max="200" step="5" value="100" />
+                  <span><strong>QR code</strong> — taille <strong id="bibQrScaleValue">100 %</strong></span>
+                  <input id="bibQrScale" type="range" min="50" max="250" step="5" value="100" />
                 </label>
               </div>
             </div>
@@ -755,6 +755,6 @@
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20-bib-backgrounds"></script>
+  <script src="app.js?v=20-bib-fix2"></script>
 </body>
 </html>

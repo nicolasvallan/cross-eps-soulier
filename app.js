@@ -45,7 +45,7 @@ function normalizeState(value){
     races:Array.isArray(s.races)?s.races:[],
     checkpoints:Array.isArray(s.checkpoints)?s.checkpoints:[],
     checkpointPoints:Array.isArray(s.checkpointPoints)&&s.checkpointPoints.length?s.checkpointPoints:[{id:"cp_point_1",name:"Point 1"}],
-    settings:{anonymousMode:!!s.settings?.anonymousMode},
+    settings:{...(s.settings||{}), anonymousMode:!!s.settings?.anonymousMode},
     startGroups:Array.isArray(s.startGroups)?s.startGroups:[],
     events:Array.isArray(s.events)?s.events:[],
     resultArchives:Array.isArray(s.resultArchives)?s.resultArchives:[]
@@ -2044,8 +2044,20 @@ const BIB_SIZE_DEFAULTS={
   bibCharityLogoScale:100,
   bibQrScale:100
 };
-function loadBibPrefs(){try{return JSON.parse(localStorage.getItem(BIB_PREFS_KEY))||{};}catch{return {};}}
-function saveBibPrefs(p){localStorage.setItem(BIB_PREFS_KEY,JSON.stringify(p));}
+function loadBibPrefs(){
+  try{
+    const local=JSON.parse(localStorage.getItem(BIB_PREFS_KEY))||{};
+    const cloud=state.settings?.bibPrefs||{};
+    return {...local,...cloud};
+  }catch{return state.settings?.bibPrefs||{};}
+}
+function saveBibPrefs(p){
+  localStorage.setItem(BIB_PREFS_KEY,JSON.stringify(p));
+  state.settings=state.settings||{};
+  state.settings.bibPrefs={...p};
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  if(canUseCloud() && !applyingCloudSnapshot) queueCloudSave();
+}
 function bibSizeValue(prefs,key){
   const n=Number(prefs?.[key]);
   return Number.isFinite(n)?n:BIB_SIZE_DEFAULTS[key];
