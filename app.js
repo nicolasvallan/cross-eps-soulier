@@ -2041,7 +2041,8 @@ const BIB_SIZE_DEFAULTS={
   bibSchoolScale:100,
   bibCharityScale:100,
   bibSchoolLogoScale:100,
-  bibCharityLogoScale:100
+  bibCharityLogoScale:100,
+  bibQrScale:100
 };
 function loadBibPrefs(){try{return JSON.parse(localStorage.getItem(BIB_PREFS_KEY))||{};}catch{return {};}}
 function saveBibPrefs(p){localStorage.setItem(BIB_PREFS_KEY,JSON.stringify(p));}
@@ -2061,7 +2062,8 @@ function bibInlineVars(prefs){
     `--bib-school-scale:${bibScaleFactor(prefs,"bibSchoolScale")}`,
     `--bib-charity-scale:${bibScaleFactor(prefs,"bibCharityScale")}`,
     `--bib-school-logo-scale:${bibScaleFactor(prefs,"bibSchoolLogoScale")}`,
-    `--bib-charity-logo-scale:${bibScaleFactor(prefs,"bibCharityLogoScale")}`
+    `--bib-charity-logo-scale:${bibScaleFactor(prefs,"bibCharityLogoScale")}`,
+    `--bib-qr-scale:${bibScaleFactor(prefs,"bibQrScale")}`
   ].join(";");
 }
 function syncBibSizeControls(){
@@ -2176,7 +2178,7 @@ document.getElementById("printBibsBtn").onclick=()=>{
     .bib-logo-placeholder{border:1px dashed #888;font-size:8pt;display:flex;align-items:center;justify-content:center;text-align:center;color:#666}.bib-logo-placeholder.bib-school-logo{width:calc(25mm * var(--bib-school-logo-scale,1));height:calc(16mm * var(--bib-school-logo-scale,1))}.bib-logo-placeholder.bib-charity-logo{width:calc(25mm * var(--bib-charity-logo-scale,1));height:calc(16mm * var(--bib-charity-logo-scale,1))}
     .bib-race{text-align:center;font-size:calc(13pt * var(--bib-race-scale,1))}.bib-race span{display:block;margin-top:2mm;color:#0f766e;font-weight:700}
     .bib-number{text-align:center;font-size:calc(72pt * var(--bib-number-scale,1));line-height:.9;font-weight:900;margin:8mm 0 3mm}
-    .bib-qr{display:flex;justify-content:center;align-items:center;margin:0 auto 2mm}.bib-qr svg{width:24mm;height:24mm}.bib-anonymous{text-align:center;color:#666;font-size:10pt}
+    .bib-qr{display:flex;justify-content:center;align-items:center;margin:0 auto 2mm}.bib-qr svg{width:calc(24mm * var(--bib-qr-scale,1));height:calc(24mm * var(--bib-qr-scale,1))}.bib-anonymous{text-align:center;color:#666;font-size:10pt}
     .bib-separator{border-top:.5mm solid #0f766e;margin:0 8mm 4mm}
     .bib-student{text-align:center;font-size:calc(19pt * var(--bib-student-scale,1));font-weight:800}
     .bib-class{text-align:center;font-size:calc(14pt * var(--bib-class-scale,1));font-weight:700;margin-top:1mm}

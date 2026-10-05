@@ -280,8 +280,8 @@ dialog::backdrop{background:rgba(15,23,42,.45)}
 .qr-actions{align-items:center;margin-top:14px;gap:10px;flex-wrap:wrap}
 .qr-dialog{width:min(94vw,520px);border:0;border-radius:16px;padding:0}.qr-dialog::backdrop{background:#0f172a99}.qr-dialog .dialog-form{padding:18px}
 #qrReader{width:100%;min-height:260px;margin-top:12px}.privacy-toggle{display:flex;gap:10px;align-items:flex-start}.privacy-toggle input{margin-top:4px;transform:scale(1.25)}
-.bib-qr{display:flex;justify-content:center;align-items:center;margin:2px auto 6px}.bib-qr svg{width:82px;height:82px}.bib-anonymous{font-size:.9rem;color:#64748b}
-@media print{.bib-qr svg{width:24mm;height:24mm}}
+.bib-qr{display:flex;justify-content:center;align-items:center;margin:2px auto 6px}.bib-qr svg{width:calc(82px * var(--bib-qr-scale,1));height:calc(82px * var(--bib-qr-scale,1))}.bib-anonymous{font-size:.9rem;color:#64748b}
+@media print{.bib-qr svg{width:calc(24mm * var(--bib-qr-scale,1));height:calc(24mm * var(--bib-qr-scale,1))}}
 
 /* V20.1 — scan QR continu */
 .qr-scanner-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.qr-scanner-head h3{margin:0}.qr-close-btn{width:44px;height:44px;border:0;border-radius:50%;background:#e2e8f0;color:#0f172a;font-size:32px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer}.qr-close-btn:hover{background:#cbd5e1}.qr-close-btn:focus-visible{outline:3px solid #38bdf8;outline-offset:2px}
