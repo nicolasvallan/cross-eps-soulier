@@ -1424,8 +1424,12 @@ window.undoCheckpoint=id=>{
 
 let qrScanner=null;
 let qrScanContext=null;
+let qrLastDecodedToken="";
+let qrLastDecodedAt=0;
 async function openQrScanner(context){
   qrScanContext=context;
+  qrLastDecodedToken="";
+  qrLastDecodedAt=0;
   const dialog=document.getElementById("qrScannerDialog");
   if(!dialog)return;
   dialog.showModal();
@@ -1441,23 +1445,41 @@ async function closeQrScanner(){
   try{if(qrScanner?.isScanning)await qrScanner.stop();}catch(e){}
   try{qrScanner?.clear();}catch(e){}
   qrScanner=null;qrScanContext=null;
+  qrLastDecodedToken="";qrLastDecodedAt=0;
   const d=document.getElementById("qrScannerDialog");if(d?.open)d.close();
 }
 async function handleQrDecoded(decoded){
   const token=String(decoded||"").replace(/^CROSS-EPS:/,"");
+  const now=Date.now();
+  // Le lecteur reste ouvert : ignorer seulement les répétitions immédiates du même QR.
+  if(token===qrLastDecodedToken && now-qrLastDecodedAt<1800)return;
+  qrLastDecodedToken=token;
+  qrLastDecodedAt=now;
+
+  const status=document.getElementById("qrScannerStatus");
   const s=state.students.find(x=>x.id===token);
-  if(!s){document.getElementById("qrScannerStatus").textContent="QR code non reconnu.";return;}
+  if(!s){status.textContent="QR code non reconnu. Présentez un autre dossard.";return;}
+  const bib=s.bib!=null?formatBib(s.bib):"?";
+
   if(qrScanContext==="checkpoint"){
     const r=selectedCheckpointRaces().find(r=>(r.participantIds||[]).includes(s.id)&&!participantIsWithdrawn(r,s.id));
-    if(!r){document.getElementById("qrScannerStatus").textContent="Ce dossard n'appartient pas à la course sélectionnée.";return;}
-    await closeQrScanner();markCheckpoint(r.id,s.id);return;
+    if(!r){status.textContent=`Dossard ${bib} non disponible à ce point de passage.`;return;}
+    const cp=selectedCheckpointPoint();
+    const alreadyPassed=state.checkpoints.some(c=>c.raceId===r.id&&c.studentId===s.id&&((c.pointId&&c.pointId===cp.id)||(!c.pointId&&(c.name||"Point")===cp.name)));
+    if(alreadyPassed){status.textContent=`Dossard ${bib} déjà enregistré ici. Scannez le suivant.`;return;}
+    markCheckpoint(r.id,s.id);
+    status.textContent=`✓ Dossard ${bib} enregistré. Scannez le suivant.`;
+    return;
   }
+
   if(qrScanContext==="finish"){
     let races=[];
     if(finishModeSelect.value==="group"){const g=startGroupById(finishGroupSelect.value);races=g?(g.raceIds||[]).map(raceById).filter(Boolean):[];}else{const r=raceById(finishRaceSelect.value);if(r)races=[r];}
     const r=races.find(r=>(r.participantIds||[]).includes(s.id)&&!participantIsWithdrawn(r,s.id)&&resultFor(r,s.id)?.finishSeconds==null);
-    if(!r){document.getElementById("qrScannerStatus").textContent="Dossard non disponible à l'arrivée sélectionnée.";return;}
-    await closeQrScanner();finishStudent(r.id,s.id);return;
+    if(!r){status.textContent=`Dossard ${bib} non disponible à cette arrivée. Scannez le suivant.`;return;}
+    finishStudent(r.id,s.id);
+    status.textContent=`✓ Arrivée du dossard ${bib} enregistrée. Scannez le suivant.`;
+    return;
   }
 }
 window.openQrScanner=openQrScanner; window.closeQrScanner=closeQrScanner;

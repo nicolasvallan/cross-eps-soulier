@@ -715,7 +715,7 @@
 
   <dialog id="qrScannerDialog" class="qr-dialog">
     <div class="dialog-form">
-      <div class="section-head compact"><h3>Scanner un dossard</h3><button type="button" class="btn secondary" onclick="closeQrScanner()">Fermer</button></div>
+      <div class="qr-scanner-head"><h3>Scanner un dossard</h3><button type="button" class="qr-close-btn" onclick="closeQrScanner()" aria-label="Fermer le scanner" title="Fermer le scanner">×</button></div>
       <div id="qrReader"></div>
       <p id="qrScannerStatus" class="muted">Initialisation de la caméra…</p>
     </div>
@@ -725,6 +725,6 @@
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20-multipoints-qr"></script>
+  <script src="app.js?v=20-qr-continu"></script>
 </body>
 </html>
