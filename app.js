@@ -2053,16 +2053,26 @@ document.getElementById("resetBibSizesBtn").addEventListener("click",()=>{
 });
 function fileToDataURL(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);});}
 async function setBibLogo(kind,file){if(!file)return;const prefs=loadBibPrefs();prefs[kind]=await fileToDataURL(file);saveBibPrefs(prefs);renderBibs();}
+function removeBibLogo(kind,inputId){
+  const prefs=loadBibPrefs();
+  prefs[kind]="";
+  saveBibPrefs(prefs);
+  const input=document.getElementById(inputId);
+  if(input)input.value="";
+  renderBibs();
+}
 document.getElementById("schoolLogoInput").addEventListener("change",e=>setBibLogo("schoolLogo",e.target.files[0]));
 document.getElementById("charityLogoInput").addEventListener("change",e=>setBibLogo("charityLogo",e.target.files[0]));
+document.getElementById("removeSchoolLogoBtn").addEventListener("click",()=>removeBibLogo("schoolLogo","schoolLogoInput"));
+document.getElementById("removeCharityLogoBtn").addEventListener("click",()=>removeBibLogo("charityLogo","charityLogoInput"));
 document.getElementById("schoolNameInput").addEventListener("input",e=>{const p=loadBibPrefs();p.schoolName=e.target.value;saveBibPrefs(p);renderBibs();});
 document.getElementById("charityTextInput").addEventListener("input",e=>{const p=loadBibPrefs();p.charityText=e.target.value;saveBibPrefs(p);renderBibs();});
 
 function bibCardHTML(student,race,prefs){
   const schoolName=prefs.schoolName||"Collège Jean-Jacques Soulier – Montluçon";
   const charityText=prefs.charityText||"Course caritative au profit de Vaincre la Mucoviscidose";
-  const schoolLogo=prefs.schoolLogo?`<img class="bib-logo bib-school-logo" src="${prefs.schoolLogo}" alt="Logo collège">`:`<div class="bib-logo-placeholder bib-school-logo">Logo<br>collège</div>`;
-  const charityLogo=prefs.charityLogo?`<img class="bib-logo bib-charity-logo" src="${prefs.charityLogo}" alt="Logo association">`:`<div class="bib-logo-placeholder bib-charity-logo">Logo<br>association</div>`;
+  const schoolLogo=prefs.schoolLogo?`<img class="bib-logo bib-school-logo" src="${prefs.schoolLogo}" alt="Logo collège">`:``;
+  const charityLogo=prefs.charityLogo?`<img class="bib-logo bib-charity-logo" src="${prefs.charityLogo}" alt="Logo association">`:``;
   return `<article class="print-bib" style="${bibInlineVars(prefs)}">
     <div class="bib-top">
       <div class="bib-brand">${schoolLogo}<span>${esc(schoolName)}</span></div>
