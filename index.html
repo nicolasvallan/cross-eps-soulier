@@ -267,8 +267,8 @@
             <h3>Arrivée par couloirs</h3>
             <p class="muted">Tous les couloirs configurés sont disponibles pour les enseignants. Les élèves doivent conserver leur ordre dans chaque file ; pour un classement global exact, affectez les nouveaux arrivants successivement aux couloirs 1, 2, 3…</p>
             <div class="actions"><label>Couloir à scanner <select id="laneNumber" class="input" style="min-width:160px"><option value="1">Couloir 1</option></select></label><button class="btn secondary" onclick="laneChangeLane()">+ Ajouter un couloir</button><span id="laneOpenInfo" class="muted"></span></div>
-            <div class="actions"><button class="btn primary" onclick="laneTap()">🏁 ARRIVÉE — Enregistrer un temps</button><button class="btn primary" onclick="openQrScanner('finish')">📷 Scanner dans le couloir choisi</button></div>
-            <p id="laneStats" style="font-weight:bold"></p>
+            <div class="actions"><button class="btn primary" onclick="openChronoStation()">⏱️ Ouvrir le grand chronomètre</button><button class="btn primary" onclick="openQrScanner('finish')">📷 Scanner dans le couloir choisi</button></div>
+            <p id="laneStats" style="font-weight:bold"></p><div class="panel soft"><h3>Arrivées déjà validées (tous modes)</h3><div id="laneValidatedArrivals"></div></div>
             <h3>Dossards disponibles (saisie manuelle)</h3><div id="laneBibs" class="bib-grid"></div>
             <h3>Ordre des dossards</h3><div id="laneEntries"></div>
             <h3>Temps de franchissement et corrections</h3><div id="laneTimes"></div>
@@ -774,6 +774,18 @@
   </dialog>
 
 
+
+  <div id="chronoStation" class="chrono-overlay" hidden role="dialog" aria-label="Poste de chronométrage">
+    <div class="chrono-fullscreen">
+      <div class="chrono-top"><h2>⏱️ Poste de chronométrage</h2><button type="button" class="btn secondary" onclick="closeChronoStation()">✕ Fermer</button></div>
+      <div class="chrono-station"><div id="laneClock" class="chrono-display">00:00.00</div>
+        <button type="button" id="laneTapButton" class="chrono-hit" onclick="laneTap()">🏁<span>ARRIVÉE</span></button>
+        <p id="laneTapNotice" aria-live="polite">Touchez le grand bouton à chaque arrivée</p>
+        <div class="chrono-counters"><div>Temps en attente : <strong id="laneTapCount">0</strong></div><div>Dernier : <strong id="laneLastTap">—</strong></div></div>
+      </div><h3>Derniers temps enregistrés</h3><div id="chronoRecentTaps" class="chrono-recent"></div>
+    </div>
+  </div>
+
   <dialog id="qrScannerDialog" class="qr-dialog">
     <div class="dialog-form">
       <div class="qr-scanner-head"><h3>Scanner un dossard</h3><button type="button" class="qr-close-btn" onclick="closeQrScanner()" aria-label="Fermer le scanner" title="Fermer le scanner">×</button></div>
@@ -786,6 +798,6 @@
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=21-2-modeles-listes"></script>
+  <script src="app.js?v=21-8-chrono-resultats"></script>
 </body>
 </html>

@@ -1740,6 +1740,7 @@ window.finishStudent=(raceId,sid)=>{
   if((raceById(raceId)?.arrivalMode||"direct")!=="direct"){alert("Cette course utilise le mode Couloirs + chrono.");return;}
   const r=raceById(raceId);
   if(participantIsWithdrawn(r,sid)){alert("Ce participant est indiqué comme non-partant ou abandon.");return;}
+  if(resultFor(r,sid)?.finishSeconds!=null){alert("Ce dossard possède déjà un temps officiel.");return;}
   if(!raceEffectiveStartMs(r)){alert("Le chronomètre de la course ou de son départ groupé doit être démarré.");return;}
   r.results=r.results||{};r.results[sid]={...(r.results[sid]||{}),finishSeconds:raceEffectiveElapsedMs(r)/1000,finishedAt:Date.now(),arrivalSource:'direct'};save();
 };
@@ -2940,6 +2941,7 @@ function addLaneScan(raceId,studentId){
   const ctx=laneContext();if(!ctx||ctx.races.some(r=>(r.arrivalMode||"direct")!=="lanes"))return false;
   const lane=selectedLane();
   if(lane>laneOpenCount(ctx))return false;
+  if(resultFor(raceById(raceId),studentId)?.finishSeconds!=null)return false;
   if(laneItems(ctx).some(e=>e.studentId===studentId&&e.raceId===raceId))return false;
   const positions=laneItems(ctx).filter(e=>e.lane===lane);
   state.laneEntries.push({id:crypto.randomUUID(),context:ctx.key,lane,position:positions.length+1,raceId,studentId,at:Date.now()});
@@ -3051,6 +3053,11 @@ function renderLaneDashboard(){
   syncLaneSelector(ctx);
   const lane=selectedLane();
   document.getElementById('laneStats').textContent=`${entries.length} dossard(s) • ${taps.length} temps • Écart : ${entries.length-taps.length}`;
+  const validated=document.getElementById('laneValidatedArrivals');
+  if(validated){
+    const finished=ctx.races.flatMap(r=>sortedFinishers(r).map(student=>({r,student,sec:resultFor(r,student.id).finishSeconds}))).sort((a,b)=>a.sec-b.sec);
+    validated.innerHTML=finished.map((x,i)=>`<div class="log-row"><span>${i+1}. Dossard ${esc(formatBib(x.student.bib))} · ${esc(x.r.name)}${isAnonymousMode()?'':` · ${esc(x.student.lastName)} ${esc(x.student.firstName)}`}</span><strong>${formatTime(x.sec)}</strong></div>`).join('')||'<span class="muted">Aucune arrivée validée pour cette course.</span>';
+  }
   const pending=ctx.races.flatMap(r=>(r.participantIds||[]).map(studentById).filter(Boolean).filter(s=>!participantIsWithdrawn(r,s.id)&&!entries.some(e=>e.studentId===s.id&&e.raceId===r.id)&&resultFor(r,s.id)?.finishSeconds==null).map(s=>({r,s}))).sort((a,b)=>Number(a.s.bib)-Number(b.s.bib));
   document.getElementById('laneBibs').innerHTML=pending.map(({r,s})=>`<button class="bib-btn" onclick="laneManualScan('${r.id}','${s.id}')">${esc(formatBib(s.bib))}${operationalStudentLabel(s)}</button>`).join('')||'<span class="muted">Tous les dossards ont été identifiés.</span>';
   document.getElementById('laneEntries').innerHTML=entries.map((e,i)=>{const s=studentById(e.studentId);return `<div class="log-row"><span>${i+1}. Couloir ${e.lane} — dossard ${esc(s?formatBib(s.bib):'?')}</span><button class="btn secondary" onclick="laneRemoveScan('${e.id}')">Retirer</button></div>`;}).join('')||'<span class="muted">Aucun scan.</span>';
