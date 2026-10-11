@@ -265,21 +265,9 @@
           </div></div>
           <div id="laneDashboard" class="panel" hidden>
             <h3>Arrivée par couloirs</h3>
-            <p class="muted">Ouvrez les couloirs successivement. Les scans peuvent continuer dans un couloir précédent : choisissez son numéro avant de scanner. Respectez l'ordre de chaque file.</p>
-            <div class="actions"><label>Couloir scanné <select id="laneNumber" class="input" aria-label="Couloir à scanner"></select></label><button class="btn secondary" onclick="laneChangeLane()">Fermer ce couloir / ouvrir le suivant →</button></div>
-            <div class="actions"><button class="btn primary" onclick="openChronoStation()">⏱️ Ouvrir le poste chronométreur</button><button class="btn primary" onclick="openQrScanner('finish')">📷 Scanner dans le couloir choisi</button></div>
-            <div id="chronoStation" class="chrono-overlay" hidden role="dialog" aria-modal="true" aria-label="Poste chronométreur">
-              <div class="chrono-station chrono-fullscreen">
-                <div class="chrono-top"><strong>🏁 Poste chronométreur</strong><button type="button" class="btn secondary" onclick="closeChronoStation()">✕ Quitter le poste</button></div>
-                <div class="muted">Chronomètre depuis le départ</div>
-                <div id="laneClock" class="chrono-display" aria-live="off">00:00.00</div>
-                <button type="button" id="laneTapButton" class="chrono-hit" onclick="laneTap()" aria-label="Enregistrer un franchissement">✓<span>ARRIVÉE</span></button>
-                <div id="laneTapNotice" aria-live="polite"></div>
-                <div class="chrono-counters"><div><strong id="laneTapCount">0</strong><div>Passages</div></div><div><strong id="laneLastTap">—</strong><div>Dernier temps</div></div></div>
-                <h3>Derniers passages</h3><div id="chronoRecentTaps" class="chrono-recent"></div>
-                <p class="muted">Les corrections restent accessibles après avoir quitté ce poste.</p>
-              </div>
-            </div>
+            <p class="muted">Tous les couloirs configurés sont disponibles pour les enseignants. Les élèves doivent conserver leur ordre dans chaque file ; pour un classement global exact, affectez les nouveaux arrivants successivement aux couloirs 1, 2, 3…</p>
+            <div class="actions"><label>Couloir à scanner <select id="laneNumber" class="input" style="min-width:160px"><option value="1">Couloir 1</option></select></label><button class="btn secondary" onclick="laneChangeLane()">+ Ajouter un couloir</button><span id="laneOpenInfo" class="muted"></span></div>
+            <div class="actions"><button class="btn primary" onclick="laneTap()">🏁 ARRIVÉE — Enregistrer un temps</button><button class="btn primary" onclick="openQrScanner('finish')">📷 Scanner dans le couloir choisi</button></div>
             <p id="laneStats" style="font-weight:bold"></p>
             <h3>Dossards disponibles (saisie manuelle)</h3><div id="laneBibs" class="bib-grid"></div>
             <h3>Ordre des dossards</h3><div id="laneEntries"></div>
@@ -738,6 +726,7 @@
         </div>
         <div><label>Premier dossard</label><input id="raceBibStart" type="number" min="1" class="input" placeholder="1" /></div>
         <div><label>Dernier dossard</label><input id="raceBibEnd" type="number" min="1" class="input" placeholder="99" /></div>
+        <div><label>Couloirs d’arrivée disponibles</label><input id="raceLaneCount" type="number" min="1" max="99" step="1" value="1" class="input" /><p class="muted small-note">Tous ces couloirs sont sélectionnables dès le début. Vous pourrez en ajouter pendant la course.</p></div>
       </div>
       <p class="muted">Exemple : 6e filles = 001 à 099 ; 6e garçons = 100 à 199. Les plages de deux courses ne doivent pas se chevaucher.</p>
       <div>

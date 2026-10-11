@@ -982,6 +982,7 @@ function buildParticipantChecks(manualSelected=[]){
 }
 document.getElementById("addRaceBtn").onclick=()=>{
   raceForm.reset();
+  raceLaneCount.value="1";
   raceId.value="";
   raceDialogTitle.textContent="Nouvelle course";
   renderRaceClassChoices([]);
@@ -998,6 +999,7 @@ window.editRace=id=>{
   raceBirthMax.value=r.birthMax||"";
   raceBibStart.value=r.bibStart??"";
   raceBibEnd.value=r.bibEnd??"";
+  raceLaneCount.value=String(Math.max(1,Number(r.arrivalLaneCount)||1));
   renderRaceClassChoices(r.classNames||[]);
   buildParticipantChecks(r.manualParticipantIds||[]);
   raceDialogTitle.textContent="Modifier la course";
@@ -1034,6 +1036,9 @@ document.getElementById("saveRaceBtn").onclick=e=>{
   const selected=[...new Set([...autoParticipantIds,...manualParticipantIds])];
   const bibStart=raceBibStart.value?Number(raceBibStart.value):null;
   const bibEnd=raceBibEnd.value?Number(raceBibEnd.value):null;
+  const arrivalLaneCount=Number(raceLaneCount.value);
+  if(!Number.isInteger(arrivalLaneCount)||arrivalLaneCount<1||arrivalLaneCount>99){alert("Indiquez entre 1 et 99 couloirs.");return;}
+  if(existingLaneCountForRace(id)>arrivalLaneCount){alert("Impossible de réduire le nombre de couloirs déjà utilisés ou ouverts.");return;}
 
   if((bibStart===null)!==(bibEnd===null)){
     alert("Renseignez le premier ET le dernier numéro de dossard.");
@@ -1061,7 +1066,7 @@ document.getElementById("saveRaceBtn").onclick=e=>{
   const rawBirth2=raceBirthMax.value?Number(raceBirthMax.value):null;
   const normalizedBirthMin=rawBirth1!==null&&rawBirth2!==null?Math.min(rawBirth1,rawBirth2):(rawBirth1??rawBirth2);
   const normalizedBirthMax=rawBirth1!==null&&rawBirth2!==null?Math.max(rawBirth1,rawBirth2):(rawBirth1??rawBirth2);
-  const data={id,name:raceName.value.trim(),distance:Number(raceDistance.value),gender:raceGender.value,birthMin:normalizedBirthMin,birthMax:normalizedBirthMax,classNames,bibStart,bibEnd,participantIds:selected,manualParticipantIds,startedAt:existing?.startedAt||null,stoppedAt:existing?.stoppedAt||null,results:existing?.results||{},participantStatus:existing?.participantStatus||{}};
+  const data={id,arrivalLaneCount,name:raceName.value.trim(),distance:Number(raceDistance.value),gender:raceGender.value,birthMin:normalizedBirthMin,birthMax:normalizedBirthMax,classNames,bibStart,bibEnd,participantIds:selected,manualParticipantIds,startedAt:existing?.startedAt||null,stoppedAt:existing?.stoppedAt||null,results:existing?.results||{},participantStatus:existing?.participantStatus||{}};
   const idx=state.races.findIndex(r=>r.id===id); if(idx>=0)state.races[idx]=data;else state.races.push(data);raceDialog.close();save();
 };
 
@@ -2871,17 +2876,28 @@ function laneTaps(ctx){return (state.finishTaps||[]).filter(e=>e.context===ctx.k
 const laneDeviceStorageKey='cross_eps_v21_device_scan_lane';
 let laneDeviceSelection=(()=>{try{return Math.max(1,Number(sessionStorage.getItem(laneDeviceStorageKey))||1);}catch(e){return 1;}})();
 function selectedLane(){return laneDeviceSelection;}
-function laneOpenCount(ctx){return Math.max(1,Number(state.settings?.openArrivalLanes?.[ctx.key])||1,...laneItems(ctx).map(e=>e.lane));}
+function existingLaneCountForRace(raceId){
+  const race=state.races.find(r=>r.id===raceId);
+  const relevantGroups=(state.startGroups||[]).filter(g=>(g.raceIds||[]).includes(raceId));
+  return Math.max(1,Number(race?.arrivalLaneCount)||1,Number(state.settings?.openArrivalLanes?.['race:'+raceId])||1,
+    ...relevantGroups.map(g=>Number(state.settings?.openArrivalLanes?.['group:'+g.id])||1),
+    ...(state.laneEntries||[]).filter(e=>e.raceId===raceId).map(e=>e.lane));
+}
+function laneOpenCount(ctx){return Math.max(1,Number(state.settings?.openArrivalLanes?.[ctx.key])||1,
+  ...ctx.races.map(r=>Number(r.arrivalLaneCount)||1),...laneItems(ctx).map(e=>e.lane));}
 function syncLaneSelector(ctx){
   const sel=document.getElementById('laneNumber');if(!sel)return;
-  const max=Math.max(laneOpenCount(ctx),laneDeviceSelection);
+  const max=laneOpenCount(ctx);
+  if(laneDeviceSelection>max){laneDeviceSelection=1;try{sessionStorage.setItem(laneDeviceStorageKey,"1");}catch(e){}}
   sel.innerHTML=Array.from({length:max},(_,i)=>`<option value="${i+1}">Couloir ${i+1}</option>`).join('');
   sel.value=String(laneDeviceSelection);
-  const opened=document.getElementById('laneOpenNumber');if(opened)opened.textContent=String(laneOpenCount(ctx));
+  const opened=document.getElementById('laneOpenNumber');if(opened)opened.textContent=String(max);
+  const info=document.getElementById('laneOpenInfo');if(info)info.textContent=max+' couloir(s) disponibles';
 }
 function addLaneScan(raceId,studentId){
   const ctx=laneContext();if(!ctx)return false;
   const lane=selectedLane();
+  if(lane>laneOpenCount(ctx))return false;
   if(laneItems(ctx).some(e=>e.studentId===studentId&&e.raceId===raceId))return false;
   const positions=laneItems(ctx).filter(e=>e.lane===lane);
   state.laneEntries.push({id:crypto.randomUUID(),context:ctx.key,lane,position:positions.length+1,raceId,studentId,at:Date.now()});
@@ -2929,10 +2945,12 @@ window.laneRemoveScan=(id)=>{if(confirm('Retirer ce dossard du couloir ?')){stat
 window.laneChangeLane=()=>{
   const ctx=laneContext();if(!ctx)return;
   const next=laneOpenCount(ctx)+1;
-  if(!confirm(`Ouvrir le couloir ${next} pour les nouveaux arrivants ? Les scans des couloirs précédents restent possibles.`))return;
+  if(!confirm(`Ajouter le couloir ${next} à cette course / ce départ ? Il sera disponible sur tous les téléphones.`))return;
   state.settings.openArrivalLanes=state.settings.openArrivalLanes||{};
   state.settings.openArrivalLanes[ctx.key]=next;
+  ctx.races.forEach(r=>{r.arrivalLaneCount=Math.max(Number(r.arrivalLaneCount)||1,next);});
   save();
+  renderLaneDashboard();
 };
 window.laneApply=()=>{
   const ctx=laneContext();if(!ctx)return;
