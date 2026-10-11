@@ -983,6 +983,7 @@ function buildParticipantChecks(manualSelected=[]){
 document.getElementById("addRaceBtn").onclick=()=>{
   raceForm.reset();
   raceLaneCount.value="1";
+  document.getElementById("raceArrivalMode").value="direct";
   raceId.value="";
   raceDialogTitle.textContent="Nouvelle course";
   renderRaceClassChoices([]);
@@ -1000,6 +1001,7 @@ window.editRace=id=>{
   raceBibStart.value=r.bibStart??"";
   raceBibEnd.value=r.bibEnd??"";
   raceLaneCount.value=String(Math.max(1,Number(r.arrivalLaneCount)||1));
+  document.getElementById("raceArrivalMode").value=r.arrivalMode||"direct";
   renderRaceClassChoices(r.classNames||[]);
   buildParticipantChecks(r.manualParticipantIds||[]);
   raceDialogTitle.textContent="Modifier la course";
@@ -1037,6 +1039,11 @@ document.getElementById("saveRaceBtn").onclick=e=>{
   const bibStart=raceBibStart.value?Number(raceBibStart.value):null;
   const bibEnd=raceBibEnd.value?Number(raceBibEnd.value):null;
   const arrivalLaneCount=Number(raceLaneCount.value);
+  const arrivalMode=document.getElementById("raceArrivalMode").value;
+  const priorRace=raceById(id);
+  if(priorRace && (priorRace.arrivalMode||"direct")!==arrivalMode){
+    alert("Changez le mode directement dans l’onglet Arrivée, afin de conserver les résultats et contrôler les passages en attente.");return;
+  }
   if(!Number.isInteger(arrivalLaneCount)||arrivalLaneCount<1||arrivalLaneCount>99){alert("Indiquez entre 1 et 99 couloirs.");return;}
   if(existingLaneCountForRace(id)>arrivalLaneCount){alert("Impossible de réduire le nombre de couloirs déjà utilisés ou ouverts.");return;}
 
@@ -1066,7 +1073,7 @@ document.getElementById("saveRaceBtn").onclick=e=>{
   const rawBirth2=raceBirthMax.value?Number(raceBirthMax.value):null;
   const normalizedBirthMin=rawBirth1!==null&&rawBirth2!==null?Math.min(rawBirth1,rawBirth2):(rawBirth1??rawBirth2);
   const normalizedBirthMax=rawBirth1!==null&&rawBirth2!==null?Math.max(rawBirth1,rawBirth2):(rawBirth1??rawBirth2);
-  const data={id,arrivalLaneCount,name:raceName.value.trim(),distance:Number(raceDistance.value),gender:raceGender.value,birthMin:normalizedBirthMin,birthMax:normalizedBirthMax,classNames,bibStart,bibEnd,participantIds:selected,manualParticipantIds,startedAt:existing?.startedAt||null,stoppedAt:existing?.stoppedAt||null,results:existing?.results||{},participantStatus:existing?.participantStatus||{}};
+  const data={id,arrivalLaneCount,arrivalMode,name:raceName.value.trim(),distance:Number(raceDistance.value),gender:raceGender.value,birthMin:normalizedBirthMin,birthMax:normalizedBirthMax,classNames,bibStart,bibEnd,participantIds:selected,manualParticipantIds,startedAt:existing?.startedAt||null,stoppedAt:existing?.stoppedAt||null,results:existing?.results||{},participantStatus:existing?.participantStatus||{}};
   const idx=state.races.findIndex(r=>r.id===id); if(idx>=0)state.races[idx]=data;else state.races.push(data);raceDialog.close();save();
 };
 
@@ -1247,11 +1254,43 @@ document.getElementById("stopRaceBtn").onclick=()=>{
   }
 };
 
+// V21.7 : les données de couloirs et les frappes chrono appartiennent
+// au dispositif (course isolée ou départ groupé), pas aux résultats classiques.
+function clearArrivalDeviceForReset(raceIds, groupId=null){
+  const ids=new Set(raceIds);
+  const contexts=new Set(raceIds.map(id=>"race:"+id));
+  if(groupId)contexts.add("group:"+groupId);
+  // Pour une course isolée, effacer également le contexte du groupe uniquement
+  // si celui-ci ne contient aucune autre course (ne pas supprimer leurs temps).
+  (state.startGroups||[]).forEach(g=>{
+    if((g.raceIds||[]).length && (g.raceIds||[]).every(id=>ids.has(id)))
+      contexts.add("group:"+g.id);
+  });
+  state.laneEntries=(state.laneEntries||[]).filter(e=>
+    !contexts.has(e.context) && !ids.has(e.raceId));
+  state.finishTaps=(state.finishTaps||[]).filter(t=>!contexts.has(t.context));
+  // Réinitialiser aussi le nombre de couloirs ouverts pour ces dispositifs.
+  if(state.settings?.openArrivalLanes){
+    contexts.forEach(key=>delete state.settings.openArrivalLanes[key]);
+  }
+}
+function canResetArrivalSafely(){
+  if(!navigator.onLine || !canUseCloud()){
+    alert("Réinitialisation impossible hors connexion ou sans synchronisation active. Reconnectez-vous pour éviter la réapparition d'anciennes arrivées.");
+    return false;
+  }
+  if(localStorage.getItem("cross-eps-pending-sync")){
+    alert("Des modifications sont encore en attente de synchronisation. Attendez l'état « Synchronisé » avant de réinitialiser.");
+    return false;
+  }
+  return true;
+}
 document.getElementById("resetRaceBtn").onclick=()=>{
   if(timingModeSelect.value==="group"){
     const g=startGroupById(timingGroupSelect.value);
-    if(!g)return;
+    if(!g || !canResetArrivalSafely())return;
     if(confirm("Réinitialiser ce départ ? Une archive sera créée avant l’effacement des données actuelles.")){ archiveGroupResults(g);
+      clearArrivalDeviceForReset(g.raceIds||[],g.id);
       g.startedAt=null;g.stoppedAt=null;
       (g.raceIds||[]).map(raceById).filter(Boolean).forEach(r=>{
         r.results={};r.startedAt=null;r.stoppedAt=null;
@@ -1262,7 +1301,8 @@ document.getElementById("resetRaceBtn").onclick=()=>{
     return;
   }
   const r=raceById(timingRaceSelect.value);
-  if(r&&confirm("Réinitialiser cette course ? Une archive sera créée avant l’effacement des données actuelles.")){ archiveRaceResults(r);
+  if(r&&canResetArrivalSafely()&&confirm("Réinitialiser cette course ? Une archive sera créée avant l’effacement des données actuelles.")){ archiveRaceResults(r);
+    clearArrivalDeviceForReset([r.id]);
     r.startedAt=null;r.stoppedAt=null;r.results={};
     state.checkpoints=state.checkpoints.filter(c=>c.raceId!==r.id);
     save();
@@ -1652,6 +1692,7 @@ function updateFinishModeUI(){
 finishModeSelect.addEventListener("change",updateFinishModeUI);
 
 function renderFinish(){
+  if(typeof syncOfficialArrivalMode==="function")syncOfficialArrivalMode();
   const wrap=document.getElementById("finishBibs");
   if(document.getElementById("finishWorkflow")?.value==="lanes"){wrap.innerHTML="";finishLog.innerHTML="";return;}
 
@@ -1696,10 +1737,11 @@ function renderFinish(){
 }
 
 window.finishStudent=(raceId,sid)=>{
+  if((raceById(raceId)?.arrivalMode||"direct")!=="direct"){alert("Cette course utilise le mode Couloirs + chrono.");return;}
   const r=raceById(raceId);
   if(participantIsWithdrawn(r,sid)){alert("Ce participant est indiqué comme non-partant ou abandon.");return;}
   if(!raceEffectiveStartMs(r)){alert("Le chronomètre de la course ou de son départ groupé doit être démarré.");return;}
-  r.results=r.results||{};r.results[sid]={...(r.results[sid]||{}),finishSeconds:raceEffectiveElapsedMs(r)/1000,finishedAt:Date.now()};save();
+  r.results=r.results||{};r.results[sid]={...(r.results[sid]||{}),finishSeconds:raceEffectiveElapsedMs(r)/1000,finishedAt:Date.now(),arrivalSource:'direct'};save();
 };
 window.undoFinish=(raceId,sid)=>{const r=raceById(raceId);if(r?.results?.[sid]){delete r.results[sid].finishSeconds;delete r.results[sid].finishedAt;save();}};
 
@@ -2871,8 +2913,8 @@ function laneContext(){
   const r=raceById(finishRaceSelect.value);
   return r?{key:'race:'+r.id,races:[r]}:null;
 }
-function laneItems(ctx){return (state.laneEntries||[]).filter(e=>e.context===ctx.key).sort((a,b)=>a.lane-b.lane||a.position-b.position);}
-function laneTaps(ctx){return (state.finishTaps||[]).filter(e=>e.context===ctx.key).sort((a,b)=>a.at-b.at||a.id.localeCompare(b.id));}
+function laneItems(ctx){return (state.laneEntries||[]).filter(e=>e.context===ctx.key&&!e.associated).sort((a,b)=>a.lane-b.lane||a.position-b.position);}
+function laneTaps(ctx){return (state.finishTaps||[]).filter(e=>e.context===ctx.key&&!e.associated).sort((a,b)=>a.at-b.at||a.id.localeCompare(b.id));}
 const laneDeviceStorageKey='cross_eps_v21_device_scan_lane';
 let laneDeviceSelection=(()=>{try{return Math.max(1,Number(sessionStorage.getItem(laneDeviceStorageKey))||1);}catch(e){return 1;}})();
 function selectedLane(){return laneDeviceSelection;}
@@ -2895,7 +2937,7 @@ function syncLaneSelector(ctx){
   const info=document.getElementById('laneOpenInfo');if(info)info.textContent=max+' couloir(s) disponibles';
 }
 function addLaneScan(raceId,studentId){
-  const ctx=laneContext();if(!ctx)return false;
+  const ctx=laneContext();if(!ctx||ctx.races.some(r=>(r.arrivalMode||"direct")!=="lanes"))return false;
   const lane=selectedLane();
   if(lane>laneOpenCount(ctx))return false;
   if(laneItems(ctx).some(e=>e.studentId===studentId&&e.raceId===raceId))return false;
@@ -2955,18 +2997,51 @@ window.laneChangeLane=()=>{
 window.laneApply=()=>{
   const ctx=laneContext();if(!ctx)return;
   const entries=laneItems(ctx),taps=laneTaps(ctx);
+  if(ctx.races.some(r=>(r.arrivalMode||'direct')!=='lanes'))return alert('Sélectionnez le mode Couloirs + chrono dans Arrivée.');
   if(!entries.length||entries.length!==taps.length)return alert('Les nombres de dossards et de temps doivent correspondre.');
-  if(entries.some(e=>resultFor(raceById(e.raceId),e.studentId)?.finishSeconds!=null))return alert('Certaines arrivées sont déjà chronométrées. Réintégrez-les avant de refaire une association.');
-  if(!confirm(`Associer ${entries.length} dossards aux ${taps.length} temps, dans l’ordre des couloirs ? Vérifiez au préalable les positions et les temps estimés.`))return;
+  if(entries.some(e=>resultFor(raceById(e.raceId),e.studentId)?.finishSeconds!=null))return alert('Certaines arrivées sont déjà chronométrées. Vérifiez les dossards avant association.');
+  if(entries.some(e=>!raceEffectiveStartMs(raceById(e.raceId))))return alert('Le départ doit être enregistré pour chaque course avant association.');
+  if(!confirm(`Associer ${entries.length} dossards aux ${taps.length} temps ? Les arrivées précédentes seront conservées.`))return;
   entries.forEach((e,i)=>{
-    const r=raceById(e.raceId),start=r&&raceEffectiveStartMs(r);
-    if(!r||!start)return;
+    const r=raceById(e.raceId),start=raceEffectiveStartMs(r);
     r.results=r.results||{};
-    r.results[e.studentId]={...(r.results[e.studentId]||{}),finishSeconds:Math.max(0,(taps[i].at-start)/1000),finishedAt:taps[i].at,estimatedFinish:!!taps[i].estimated};
-  });save();alert('Association effectuée. Vérifiez les résultats avant validation.');
+    r.results[e.studentId]={...(r.results[e.studentId]||{}),finishSeconds:Math.max(0,(taps[i].at-start)/1000),finishedAt:taps[i].at,estimatedFinish:!!taps[i].estimated,arrivalSource:'lanes'};
+    e.associated=true;taps[i].associated=true;
+  });save();alert('Association effectuée. Les résultats précédents ont été conservés.');
 };
+function syncOfficialArrivalMode(){
+  const select=document.getElementById('finishWorkflow');if(!select)return;
+  const ctx=laneContext();
+  if(!ctx){select.value='direct';select.disabled=true;return;}
+  const modes=[...new Set(ctx.races.map(r=>r.arrivalMode||'direct'))];
+  if(modes.length!==1){select.value='direct';select.disabled=true;select.title='Les courses du groupe doivent avoir le même mode';return;}
+  select.disabled=false;select.title='';select.value=modes[0];
+}
+function changeArrivalWorkflow(next){
+  const ctx=laneContext(),select=document.getElementById('finishWorkflow');
+  if(!ctx||ctx.races.length===0){syncOfficialArrivalMode();return;}
+  const previous=[...new Set(ctx.races.map(r=>r.arrivalMode||'direct'))];
+  if(previous.length!==1){alert('Choisissez une seule course ou harmonisez les modes du groupe.');syncOfficialArrivalMode();return;}
+  if(previous[0]===next)return;
+  const pendingEntries=laneItems(ctx),pendingTaps=laneTaps(ctx);
+  // Les anciennes versions ne marquaient pas les passages déjà associés.
+  // On les reconnaît uniquement si chaque dossard a un résultat officiel et si les effectifs concordent.
+  if(pendingEntries.length||pendingTaps.length){
+    const allMatched=pendingEntries.length===pendingTaps.length&&pendingEntries.length>0&&pendingEntries.every(e=>resultFor(raceById(e.raceId),e.studentId)?.finishSeconds!=null);
+    if(allMatched){pendingEntries.forEach(e=>e.associated=true);pendingTaps.forEach(t=>t.associated=true);}
+    else{alert('Des scans ou temps ne sont pas encore associés. Terminez ou corrigez leur association avant de changer de mode. Aucun résultat n’a été supprimé.');syncOfficialArrivalMode();return;}
+  }
+  const finished=ctx.races.reduce((n,r)=>n+Object.values(r.results||{}).filter(v=>v?.finishSeconds!=null).length,0);
+  if(!confirm(`Passer en mode ${next==='lanes'?'Couloirs + chrono':'Scan direct'} ?\n\n${finished} arrivée(s) déjà validée(s) seront conservées avec leurs temps et resteront dans les résultats. Seules les prochaines arrivées utiliseront le nouveau mode.`)){
+    syncOfficialArrivalMode();return;
+  }
+  ctx.races.forEach(r=>r.arrivalMode=next);
+  save();syncOfficialArrivalMode();renderFinish();renderLaneDashboard();
+}
+document.getElementById('finishWorkflow').addEventListener('change',e=>changeArrivalWorkflow(e.target.value));
 function renderLaneDashboard(){
   const panel=document.getElementById('laneDashboard');if(!panel)return;
+  syncOfficialArrivalMode();
   const mode=document.getElementById('finishWorkflow')?.value||'direct';
   panel.hidden=mode!=='lanes';
   document.getElementById('finishDirectControls').hidden=mode==='lanes';
@@ -2987,7 +3062,7 @@ function renderLaneDashboard(){
   const last=document.getElementById('laneLastTap');if(last)last.textContent=taps.length?(start?formatTime((taps[taps.length-1].at-start)/1000):new Date(taps[taps.length-1].at).toLocaleTimeString()):'—';
   const recent=document.getElementById('chronoRecentTaps');if(recent)recent.innerHTML=taps.slice(-12).reverse().map((t,i)=>`<div class="chrono-recent-row"><strong>#${taps.length-i}</strong><span>${start?formatTime((t.at-start)/1000):new Date(t.at).toLocaleTimeString()}${t.estimated?' · estimé':''}</span></div>`).join('')||'<p class="muted">Aucun passage enregistré.</p>';
 }
-document.getElementById('finishWorkflow').addEventListener('change',()=>{renderFinish();renderLaneDashboard();});
+// Le mode officiel se configure uniquement dans les paramètres de course.
 document.getElementById('laneNumber').addEventListener('change',e=>{
   laneDeviceSelection=Math.max(1,Number(e.target.value)||1);
   try{sessionStorage.setItem(laneDeviceStorageKey,String(laneDeviceSelection));}catch(err){}
