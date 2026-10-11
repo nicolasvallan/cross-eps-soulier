@@ -294,3 +294,29 @@ dialog::backdrop{background:rgba(15,23,42,.45)}
 .bib-background-choice strong{font-size:.78rem}.bib-background-choice.selected{border-color:#0f766e;box-shadow:0 0 0 2px #99f6e4}
 .bib-background-tools{margin-top:14px;align-items:end}.print-bib{position:relative;overflow:hidden;background:#fff}.bib-background{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}.bib-content{position:relative;z-index:1;display:flex;flex-direction:column;height:100%}
 @media(max-width:650px){.bib-background-gallery{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* V21 : confirmation QR très visible */
+.qr-feedback[hidden]{display:none!important}.qr-feedback{position:fixed;z-index:100000;inset:14% 7%;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:14px;border-radius:22px;color:white;text-align:center;font-size:clamp(22px,6vw,48px);font-weight:900;box-shadow:0 0 0 100vmax #0008;pointer-events:none}.qr-feedback .qr-symbol{font-size:clamp(100px,28vw,210px);line-height:1}.qr-feedback span{font-size:clamp(18px,4vw,30px)}.qr-success{background:#087b39}.qr-error{background:#bd1625}
+
+/* V21.1 — Poste chronométreur et choix indépendant du couloir */
+.lane-control{display:flex;flex-wrap:wrap;gap:18px;justify-content:space-between;align-items:center;margin:14px 0;padding:14px;background:#f1f5f9;border-radius:12px}
+.lane-control .muted{max-width:420px;font-size:.88rem}
+.chrono-station{position:relative;max-width:620px;margin:18px auto;padding:20px 14px;text-align:center;background:#eef4ff;border:2px solid #c7d9ff;border-radius:20px}
+.chrono-display{font-variant-numeric:tabular-nums;font-size:clamp(2.8rem,10vw,5.4rem);font-weight:800;line-height:1.15;color:#112d5a;letter-spacing:-.04em}
+.chrono-hit{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;width:min(68vw,270px);height:min(68vw,270px);max-width:270px;max-height:270px;border:0;border-radius:50%;background:#2463e8;color:white;font-size:2rem;font-weight:800;box-shadow:0 10px 25px #1b4b9b55;cursor:pointer;touch-action:manipulation;user-select:none;margin:18px auto;transition:transform .1s,background .1s}
+.chrono-hit:active,.chrono-hit-flash{transform:scale(.95);background:#168047}
+.chrono-hit span{font-size:1.5rem}
+.chrono-counters{display:flex;justify-content:space-around;gap:10px;font-variant-numeric:tabular-nums;font-size:1.05rem}
+#laneTapNotice{min-height:24px;color:#14723d;font-weight:700}
+@media(max-width:600px){.chrono-station{padding:14px 8px}.lane-control{display:block}.lane-control>div+div{margin-top:12px}}
+
+/* V21.3 : poste chronométreur indépendant, plein écran */
+.chrono-overlay[hidden]{display:none!important}
+.chrono-overlay{position:fixed;inset:0;z-index:10000;background:#eaf1ff;overflow-y:auto;overscroll-behavior:contain;padding:12px;box-sizing:border-box}
+.chrono-fullscreen{max-width:700px;margin:0 auto;min-height:calc(100dvh - 24px);box-sizing:border-box}
+.chrono-top{display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left;margin-bottom:18px}
+.chrono-fullscreen .chrono-hit{width:min(72vw,320px);height:min(72vw,320px);max-width:320px;max-height:320px;font-size:3rem}
+.chrono-recent{max-height:32vh;overflow-y:auto;text-align:left;background:white;border-radius:12px;padding:8px}
+.chrono-recent-row{display:flex;justify-content:space-between;padding:9px 12px;border-bottom:1px solid #dbe4f1;font-variant-numeric:tabular-nums}
+.chrono-recent-row:first-child{font-weight:800;color:#17613b;background:#e5f7ec}
+@media(max-width:600px){.chrono-overlay{padding:4px}.chrono-fullscreen{margin:0;min-height:100dvh}.chrono-fullscreen .chrono-hit{width:min(75vw,290px);height:min(75vw,290px)}}

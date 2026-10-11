@@ -74,6 +74,7 @@
           <div><h2>Élèves</h2><p>Base élèves et attribution des dossards.</p></div>
           <div class="actions wrap">
             <label class="btn secondary file-btn">Importer CSV / Excel<input id="csvInput" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden></label>
+            <button id="printParticipantsBtn" class="btn secondary" type="button">Imprimer listes participants</button>
             <button id="assignBibBtn" class="btn secondary">Attribuer selon les courses</button>
           <button id="resetStudentsBtn" class="btn danger">Réinitialiser les élèves</button>
             <button id="addStudentBtn" class="btn primary">+ Ajouter</button>
@@ -256,10 +257,35 @@
               <select id="finishGroupSelect" class="input"></select>
             </div>
           </div>
-          <div class="actions qr-actions"><button type="button" class="btn primary" onclick="openQrScanner('finish')">📷 Scanner un QR code</button><span class="muted">ou touchez directement un numéro de dossard</span></div><div id="finishBibs" class="bib-grid"></div>
+          <div class="panel soft"><label>Organisation des arrivées</label><select id="finishWorkflow" class="input"><option value="direct">Scan direct (mode actuel)</option><option value="lanes">Couloirs + chronométrage séparé</option></select></div>
+          <div id="finishDirectControls"><div class="actions qr-actions"><button type="button" class="btn primary" onclick="openQrScanner('finish')">📷 Scanner un QR code</button><span class="muted">ou touchez directement un numéro de dossard</span></div><div id="finishBibs" class="bib-grid"></div>
           <div class="panel soft">
             <h3>Dernières arrivées</h3>
             <div id="finishLog"></div>
+          </div></div>
+          <div id="laneDashboard" class="panel" hidden>
+            <h3>Arrivée par couloirs</h3>
+            <p class="muted">Ouvrez les couloirs successivement. Les scans peuvent continuer dans un couloir précédent : choisissez son numéro avant de scanner. Respectez l'ordre de chaque file.</p>
+            <div class="actions"><label>Couloir scanné <select id="laneNumber" class="input" aria-label="Couloir à scanner"></select></label><button class="btn secondary" onclick="laneChangeLane()">Fermer ce couloir / ouvrir le suivant →</button></div>
+            <div class="actions"><button class="btn primary" onclick="openChronoStation()">⏱️ Ouvrir le poste chronométreur</button><button class="btn primary" onclick="openQrScanner('finish')">📷 Scanner dans le couloir choisi</button></div>
+            <div id="chronoStation" class="chrono-overlay" hidden role="dialog" aria-modal="true" aria-label="Poste chronométreur">
+              <div class="chrono-station chrono-fullscreen">
+                <div class="chrono-top"><strong>🏁 Poste chronométreur</strong><button type="button" class="btn secondary" onclick="closeChronoStation()">✕ Quitter le poste</button></div>
+                <div class="muted">Chronomètre depuis le départ</div>
+                <div id="laneClock" class="chrono-display" aria-live="off">00:00.00</div>
+                <button type="button" id="laneTapButton" class="chrono-hit" onclick="laneTap()" aria-label="Enregistrer un franchissement">✓<span>ARRIVÉE</span></button>
+                <div id="laneTapNotice" aria-live="polite"></div>
+                <div class="chrono-counters"><div><strong id="laneTapCount">0</strong><div>Passages</div></div><div><strong id="laneLastTap">—</strong><div>Dernier temps</div></div></div>
+                <h3>Derniers passages</h3><div id="chronoRecentTaps" class="chrono-recent"></div>
+                <p class="muted">Les corrections restent accessibles après avoir quitté ce poste.</p>
+              </div>
+            </div>
+            <p id="laneStats" style="font-weight:bold"></p>
+            <h3>Dossards disponibles (saisie manuelle)</h3><div id="laneBibs" class="bib-grid"></div>
+            <h3>Ordre des dossards</h3><div id="laneEntries"></div>
+            <h3>Temps de franchissement et corrections</h3><div id="laneTimes"></div>
+            <div class="actions"><button class="btn primary" onclick="laneApply()">Associer les temps aux dossards</button></div>
+            <p class="muted">Attention : le temps estimé est indicatif. En cas de plusieurs départs, chaque temps est calculé à partir du départ de la course du dossard.</p>
           </div>
         </div>
       </section>
@@ -341,6 +367,22 @@
               <h3>1. Sélectionner la course</h3>
               <label>Course</label>
               <select id="bibRaceSelect" class="input"></select>
+            </div>
+
+            <div class="panel">
+              <h3>Mes modèles de dossards</h3>
+              <p class="muted">Enregistrez plusieurs présentations indépendamment des courses. Les modèles sont conservés sur cet appareil ; exportez-les pour les sauvegarder ou les transférer.</p>
+              <label for="bibTemplateSelect">Modèle enregistré</label>
+              <select id="bibTemplateSelect" class="input"><option value="">— Choisir un modèle —</option></select>
+              <div class="actions wrap" style="margin-top:12px">
+                <button id="bibTemplateSaveNew" class="btn primary" type="button">+ Enregistrer comme nouveau modèle</button>
+                <button id="bibTemplateLoad" class="btn secondary" type="button">Charger</button>
+                <button id="bibTemplateUpdate" class="btn secondary" type="button">Remplacer le modèle</button>
+                <button id="bibTemplateRename" class="btn secondary" type="button">Renommer</button>
+                <button id="bibTemplateDelete" class="btn danger" type="button">Supprimer</button>
+                <button id="bibTemplateExport" class="btn secondary" type="button">Exporter JSON</button>
+                <label class="btn secondary file-btn">Importer JSON<input id="bibTemplateImport" type="file" accept=".json,application/json" hidden></label>
+              </div>
             </div>
 
             <div class="panel">
@@ -746,7 +788,7 @@
   <dialog id="qrScannerDialog" class="qr-dialog">
     <div class="dialog-form">
       <div class="qr-scanner-head"><h3>Scanner un dossard</h3><button type="button" class="qr-close-btn" onclick="closeQrScanner()" aria-label="Fermer le scanner" title="Fermer le scanner">×</button></div>
-      <div id="qrReader"></div>
+      <div id="qrReader"></div><div id="qrFeedback" class="qr-feedback" hidden></div>
       <p id="qrScannerStatus" class="muted">Initialisation de la caméra…</p>
     </div>
   </dialog>
@@ -755,6 +797,6 @@
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=20-bib-backgrounds"></script>
+  <script src="app.js?v=21-2-modeles-listes"></script>
 </body>
 </html>

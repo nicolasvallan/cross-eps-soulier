@@ -36,7 +36,7 @@ let workspaceMeta = {
 };
 
 function defaultState(){
-  return {students:[], races:[], checkpoints:[], checkpointPoints:[{id:"cp_point_1",name:"Point 1"}], settings:{anonymousMode:false}, startGroups:[], events:[], resultArchives:[]};
+  return {students:[], races:[], checkpoints:[], checkpointPoints:[{id:"cp_point_1",name:"Point 1"}], settings:{anonymousMode:false}, startGroups:[], events:[], resultArchives:[],laneEntries:[],finishTaps:[]};
 }
 function normalizeState(value){
   const s=(value && typeof value==="object")?value:{};
@@ -48,7 +48,9 @@ function normalizeState(value){
     settings:{...(s.settings||{}),anonymousMode:!!s.settings?.anonymousMode},
     startGroups:Array.isArray(s.startGroups)?s.startGroups:[],
     events:Array.isArray(s.events)?s.events:[],
-    resultArchives:Array.isArray(s.resultArchives)?s.resultArchives:[]
+    resultArchives:Array.isArray(s.resultArchives)?s.resultArchives:[],
+    laneEntries:Array.isArray(s.laneEntries)?s.laneEntries:[],
+    finishTaps:Array.isArray(s.finishTaps)?s.finishTaps:[]
   };
 }
 function loadState(){
@@ -685,7 +687,7 @@ function syncAllRaceParticipants(){
 
 function renderAll(){
   syncAllRaceParticipants();
-  renderDashboard(); renderStudents(); renderRaces(); renderStartGroups(); fillRaceSelects(); fillStartGroupSelects(); renderParticipantStatus(); renderCheckpoint(); renderFinish(); renderResults(); renderTimer(); renderBibs(); renderEvents(); fillCheckpointPointSelect(); renderCheckpointPointSettings();
+  renderDashboard(); renderStudents(); renderRaces(); renderStartGroups(); fillRaceSelects(); fillStartGroupSelects(); renderParticipantStatus(); renderCheckpoint(); renderFinish(); renderLaneDashboard(); renderResults(); renderTimer(); renderBibs(); renderEvents(); fillCheckpointPointSelect(); renderCheckpointPointSettings();
 }
 function renderDashboard(){
   const allRunning=state.races.filter(r=>r.startedAt&&!r.stoppedAt).length + (state.startGroups||[]).filter(g=>g.startedAt&&!g.stoppedAt).length;
@@ -1458,17 +1460,17 @@ async function handleQrDecoded(decoded){
 
   const status=document.getElementById("qrScannerStatus");
   const s=state.students.find(x=>x.id===token);
-  if(!s){status.textContent="QR code non reconnu. Présentez un autre dossard.";return;}
+  if(!s){qrFeedback(false,"QR INCONNU","Dossard non reconnu");return;}
   const bib=s.bib!=null?formatBib(s.bib):"?";
 
   if(qrScanContext==="checkpoint"){
     const r=selectedCheckpointRaces().find(r=>(r.participantIds||[]).includes(s.id)&&!participantIsWithdrawn(r,s.id));
-    if(!r){status.textContent=`Dossard ${bib} non disponible à ce point de passage.`;return;}
+    if(!r){qrFeedback(false,`DOSSARD ${bib}`,"Non disponible à ce point");return;}
     const cp=selectedCheckpointPoint();
     const alreadyPassed=state.checkpoints.some(c=>c.raceId===r.id&&c.studentId===s.id&&((c.pointId&&c.pointId===cp.id)||(!c.pointId&&(c.name||"Point")===cp.name)));
-    if(alreadyPassed){status.textContent=`Dossard ${bib} déjà enregistré ici. Scannez le suivant.`;return;}
+    if(alreadyPassed){qrFeedback(false,`DOSSARD ${bib}`,"Déjà enregistré ici");return;}
     markCheckpoint(r.id,s.id);
-    status.textContent=`✓ Dossard ${bib} enregistré. Scannez le suivant.`;
+    qrFeedback(true,`DOSSARD ${bib}`,"Passage enregistré");
     return;
   }
 
@@ -1476,9 +1478,11 @@ async function handleQrDecoded(decoded){
     let races=[];
     if(finishModeSelect.value==="group"){const g=startGroupById(finishGroupSelect.value);races=g?(g.raceIds||[]).map(raceById).filter(Boolean):[];}else{const r=raceById(finishRaceSelect.value);if(r)races=[r];}
     const r=races.find(r=>(r.participantIds||[]).includes(s.id)&&!participantIsWithdrawn(r,s.id)&&resultFor(r,s.id)?.finishSeconds==null);
-    if(!r){status.textContent=`Dossard ${bib} non disponible à cette arrivée. Scannez le suivant.`;return;}
-    finishStudent(r.id,s.id);
-    status.textContent=`✓ Arrivée du dossard ${bib} enregistrée. Scannez le suivant.`;
+    if(!r){qrFeedback(false,`DOSSARD ${bib}`,"Déjà arrivé ou hors course");return;}
+    if(document.getElementById("finishWorkflow")?.value==="lanes"){
+      if(!addLaneScan(r.id,s.id)){qrFeedback(false,`DOSSARD ${bib}`,"Doublon ou couloir non sélectionné");return;}
+      qrFeedback(true,`DOSSARD ${bib}`,"Ajouté au couloir");
+    }else{finishStudent(r.id,s.id);qrFeedback(true,`DOSSARD ${bib}`,"Arrivée enregistrée");}
     return;
   }
 }
@@ -1644,6 +1648,7 @@ finishModeSelect.addEventListener("change",updateFinishModeUI);
 
 function renderFinish(){
   const wrap=document.getElementById("finishBibs");
+  if(document.getElementById("finishWorkflow")?.value==="lanes"){wrap.innerHTML="";finishLog.innerHTML="";return;}
 
   if(finishModeSelect.value==="group"){
     const g=startGroupById(finishGroupSelect.value);
@@ -2839,3 +2844,231 @@ updateTimingModeUI();
 updateFinishModeUI();
 applyRoleUI();
 
+
+
+// V21 — Couloirs d'arrivée et chronométrage indépendant.
+let qrFeedbackTimer=null;
+function qrFeedback(ok,title,detail){
+  const el=document.getElementById('qrFeedback');if(!el)return;
+  el.className='qr-feedback '+(ok?'qr-success':'qr-error');
+  el.innerHTML=`<div class="qr-symbol">${ok?'✓':'✕'}</div><strong>${esc(title)}</strong><span>${esc(detail)}</span>`;
+  el.hidden=false;
+  clearTimeout(qrFeedbackTimer);
+  qrFeedbackTimer=setTimeout(()=>{el.hidden=true;},1250);
+  try{if(navigator.vibrate)navigator.vibrate(ok?80:[120,90,120]);}catch(e){}
+  try{const C=window.AudioContext||window.webkitAudioContext;if(C){const ctx=new C(),o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.frequency.value=ok?900:260;g.gain.value=.055;o.start();o.stop(ctx.currentTime+(ok?.11:.27));o.onended=()=>ctx.close();}}catch(e){}
+}
+function laneContext(){
+  if(finishModeSelect.value==='group'){
+    const g=startGroupById(finishGroupSelect.value);
+    return g?{key:'group:'+g.id,races:(g.raceIds||[]).map(raceById).filter(Boolean)}:null;
+  }
+  const r=raceById(finishRaceSelect.value);
+  return r?{key:'race:'+r.id,races:[r]}:null;
+}
+function laneItems(ctx){return (state.laneEntries||[]).filter(e=>e.context===ctx.key).sort((a,b)=>a.lane-b.lane||a.position-b.position);}
+function laneTaps(ctx){return (state.finishTaps||[]).filter(e=>e.context===ctx.key).sort((a,b)=>a.at-b.at||a.id.localeCompare(b.id));}
+const laneDeviceStorageKey='cross_eps_v21_device_scan_lane';
+let laneDeviceSelection=(()=>{try{return Math.max(1,Number(sessionStorage.getItem(laneDeviceStorageKey))||1);}catch(e){return 1;}})();
+function selectedLane(){return laneDeviceSelection;}
+function laneOpenCount(ctx){return Math.max(1,Number(state.settings?.openArrivalLanes?.[ctx.key])||1,...laneItems(ctx).map(e=>e.lane));}
+function syncLaneSelector(ctx){
+  const sel=document.getElementById('laneNumber');if(!sel)return;
+  const max=Math.max(laneOpenCount(ctx),laneDeviceSelection);
+  sel.innerHTML=Array.from({length:max},(_,i)=>`<option value="${i+1}">Couloir ${i+1}</option>`).join('');
+  sel.value=String(laneDeviceSelection);
+  const opened=document.getElementById('laneOpenNumber');if(opened)opened.textContent=String(laneOpenCount(ctx));
+}
+function addLaneScan(raceId,studentId){
+  const ctx=laneContext();if(!ctx)return false;
+  const lane=selectedLane();
+  if(laneItems(ctx).some(e=>e.studentId===studentId&&e.raceId===raceId))return false;
+  const positions=laneItems(ctx).filter(e=>e.lane===lane);
+  state.laneEntries.push({id:crypto.randomUUID(),context:ctx.key,lane,position:positions.length+1,raceId,studentId,at:Date.now()});
+  save();return true;
+}
+window.laneManualScan=(raceId,studentId)=>{
+  if(!addLaneScan(raceId,studentId))alert('Dossard déjà scanné dans ce dispositif.');
+};
+window.openChronoStation=()=>{const ctx=laneContext();if(!ctx)return alert('Sélectionnez une course ou un départ groupé.');document.getElementById('chronoStation').hidden=false;renderLaneDashboard();updateLaneClock();};
+window.closeChronoStation=()=>{document.getElementById('chronoStation').hidden=true;};
+window.laneTap=()=>{
+  const ctx=laneContext();if(!ctx)return alert('Sélectionnez une course ou un départ groupé.');
+  if(!ctx.races.some(r=>raceEffectiveStartMs(r)))return alert('Démarrez le chronomètre avant les arrivées.');
+  const at=Date.now();state.finishTaps.push({id:crypto.randomUUID(),context:ctx.key,at,estimated:false});
+  const button=document.getElementById('laneTapButton');if(button){button.classList.add('chrono-hit-flash');setTimeout(()=>button.classList.remove('chrono-hit-flash'),180);}
+  const notice=document.getElementById('laneTapNotice');if(notice)notice.textContent='✓ Temps enregistré';
+  try{navigator.vibrate?.(45);}catch(e){}
+  save();
+};
+window.laneInsertTime=(index)=>{
+  const ctx=laneContext();if(!ctx)return;
+  const taps=laneTaps(ctx),before=taps[index-1],after=taps[index];
+  const start=ctx.races.map(r=>raceEffectiveStartMs(r)).filter(Boolean).sort((a,b)=>a-b)[0];
+  if(!start)return alert('Le départ doit être lancé.');
+  const suggestion=before&&after?(before.at+after.at)/2:before?before.at+1000:after?after.at-1000:Date.now();
+  const elapsed=Math.max(0,(suggestion-start)/1000);
+  const value=prompt('Temps estimé depuis le départ, en secondes (modifiable) :',elapsed.toFixed(1));
+  if(value===null)return;
+  const seconds=Number(String(value).replace(',','.'));
+  if(!Number.isFinite(seconds)||seconds<0)return alert('Temps invalide.');
+  const at=start+seconds*1000;
+  if((before&&at<before.at)||(after&&at>after.at))return alert('Le temps doit se situer entre les temps voisins.');
+  state.finishTaps.push({id:crypto.randomUUID(),context:ctx.key,at,estimated:true});save();
+};
+window.laneEditTime=(id)=>{
+  const ctx=laneContext(),t=laneTaps(ctx).find(t=>t.id===id);if(!t)return;
+  const start=ctx.races.map(r=>raceEffectiveStartMs(r)).filter(Boolean).sort((a,b)=>a-b)[0];
+  if(!start)return;
+  const value=prompt('Temps en secondes depuis le départ :',((t.at-start)/1000).toFixed(1));if(value===null)return;
+  const seconds=Number(String(value).replace(',','.'));if(!Number.isFinite(seconds)||seconds<0)return alert('Temps invalide.');
+  t.at=start+seconds*1000;t.estimated=true;save();
+};
+window.laneDeleteTime=(id)=>{if(confirm('Supprimer ce temps ?')){state.finishTaps=state.finishTaps.filter(t=>t.id!==id);save();}};
+window.laneRemoveScan=(id)=>{if(confirm('Retirer ce dossard du couloir ?')){state.laneEntries=state.laneEntries.filter(e=>e.id!==id);save();}};
+window.laneChangeLane=()=>{
+  const ctx=laneContext();if(!ctx)return;
+  const next=laneOpenCount(ctx)+1;
+  if(!confirm(`Ouvrir le couloir ${next} pour les nouveaux arrivants ? Les scans des couloirs précédents restent possibles.`))return;
+  state.settings.openArrivalLanes=state.settings.openArrivalLanes||{};
+  state.settings.openArrivalLanes[ctx.key]=next;
+  save();
+};
+window.laneApply=()=>{
+  const ctx=laneContext();if(!ctx)return;
+  const entries=laneItems(ctx),taps=laneTaps(ctx);
+  if(!entries.length||entries.length!==taps.length)return alert('Les nombres de dossards et de temps doivent correspondre.');
+  if(entries.some(e=>resultFor(raceById(e.raceId),e.studentId)?.finishSeconds!=null))return alert('Certaines arrivées sont déjà chronométrées. Réintégrez-les avant de refaire une association.');
+  if(!confirm(`Associer ${entries.length} dossards aux ${taps.length} temps, dans l’ordre des couloirs ? Vérifiez au préalable les positions et les temps estimés.`))return;
+  entries.forEach((e,i)=>{
+    const r=raceById(e.raceId),start=r&&raceEffectiveStartMs(r);
+    if(!r||!start)return;
+    r.results=r.results||{};
+    r.results[e.studentId]={...(r.results[e.studentId]||{}),finishSeconds:Math.max(0,(taps[i].at-start)/1000),finishedAt:taps[i].at,estimatedFinish:!!taps[i].estimated};
+  });save();alert('Association effectuée. Vérifiez les résultats avant validation.');
+};
+function renderLaneDashboard(){
+  const panel=document.getElementById('laneDashboard');if(!panel)return;
+  const mode=document.getElementById('finishWorkflow')?.value||'direct';
+  panel.hidden=mode!=='lanes';
+  document.getElementById('finishDirectControls').hidden=mode==='lanes';
+  if(mode!=='lanes')return;
+  const ctx=laneContext();if(!ctx){panel.querySelector('#laneStats').textContent='Sélectionnez une course.';return;}
+  const entries=laneItems(ctx),taps=laneTaps(ctx);
+  syncLaneSelector(ctx);
+  const lane=selectedLane();
+  document.getElementById('laneStats').textContent=`${entries.length} dossard(s) • ${taps.length} temps • Écart : ${entries.length-taps.length}`;
+  const pending=ctx.races.flatMap(r=>(r.participantIds||[]).map(studentById).filter(Boolean).filter(s=>!participantIsWithdrawn(r,s.id)&&!entries.some(e=>e.studentId===s.id&&e.raceId===r.id)&&resultFor(r,s.id)?.finishSeconds==null).map(s=>({r,s}))).sort((a,b)=>Number(a.s.bib)-Number(b.s.bib));
+  document.getElementById('laneBibs').innerHTML=pending.map(({r,s})=>`<button class="bib-btn" onclick="laneManualScan('${r.id}','${s.id}')">${esc(formatBib(s.bib))}${operationalStudentLabel(s)}</button>`).join('')||'<span class="muted">Tous les dossards ont été identifiés.</span>';
+  document.getElementById('laneEntries').innerHTML=entries.map((e,i)=>{const s=studentById(e.studentId);return `<div class="log-row"><span>${i+1}. Couloir ${e.lane} — dossard ${esc(s?formatBib(s.bib):'?')}</span><button class="btn secondary" onclick="laneRemoveScan('${e.id}')">Retirer</button></div>`;}).join('')||'<span class="muted">Aucun scan.</span>';
+  const start=ctx.races.map(r=>raceEffectiveStartMs(r)).filter(Boolean).sort((a,b)=>a-b)[0];
+  let html='';taps.forEach((t,i)=>{html+=`<div class="log-row"><span>${i+1}. ${start?formatTime((t.at-start)/1000):new Date(t.at).toLocaleTimeString()} ${t.estimated?'🟠 Estimé':''}</span><span><button class="btn secondary" onclick="laneInsertTime(${i})">+ avant</button> <button class="btn secondary" onclick="laneEditTime('${t.id}')">Modifier</button> <button class="btn secondary" onclick="laneDeleteTime('${t.id}')">Supprimer</button></span></div>`;});
+  html+=`<button class="btn secondary" onclick="laneInsertTime(${taps.length})">+ Ajouter un temps à la fin</button>`;
+  document.getElementById('laneTimes').innerHTML=html;
+  const count=document.getElementById('laneTapCount');if(count)count.textContent=String(taps.length);
+  const last=document.getElementById('laneLastTap');if(last)last.textContent=taps.length?(start?formatTime((taps[taps.length-1].at-start)/1000):new Date(taps[taps.length-1].at).toLocaleTimeString()):'—';
+  const recent=document.getElementById('chronoRecentTaps');if(recent)recent.innerHTML=taps.slice(-12).reverse().map((t,i)=>`<div class="chrono-recent-row"><strong>#${taps.length-i}</strong><span>${start?formatTime((t.at-start)/1000):new Date(t.at).toLocaleTimeString()}${t.estimated?' · estimé':''}</span></div>`).join('')||'<p class="muted">Aucun passage enregistré.</p>';
+}
+document.getElementById('finishWorkflow').addEventListener('change',()=>{renderFinish();renderLaneDashboard();});
+document.getElementById('laneNumber').addEventListener('change',e=>{
+  laneDeviceSelection=Math.max(1,Number(e.target.value)||1);
+  try{sessionStorage.setItem(laneDeviceStorageKey,String(laneDeviceSelection));}catch(err){}
+  renderLaneDashboard();
+});
+function updateLaneClock(){
+  const el=document.getElementById('laneClock');if(!el||document.getElementById('chronoStation')?.hidden)return;
+  const ctx=laneContext();const starts=ctx?.races.map(r=>raceEffectiveStartMs(r)).filter(Boolean).sort((a,b)=>a-b)||[];
+  if(!starts.length){el.textContent='Départ non lancé';return;}
+  const elapsed=Math.max(0,Date.now()-starts[0]);
+  const minutes=Math.floor(elapsed/60000),seconds=Math.floor((elapsed%60000)/1000),centis=Math.floor((elapsed%1000)/10);
+  el.textContent=`${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}.${String(centis).padStart(2,'0')}`;
+}
+setInterval(updateLaneClock,70);
+
+
+// V21.2 : modèles de dossards (bibliothèque locale indépendante des événements).
+const BIB_TEMPLATES_KEY='crossEPS_bibTemplates_v2';
+function readBibTemplates(){try{const a=JSON.parse(localStorage.getItem(BIB_TEMPLATES_KEY));return Array.isArray(a)?a:[];}catch{return [];}}
+function writeBibTemplates(items){try{localStorage.setItem(BIB_TEMPLATES_KEY,JSON.stringify(items));return true;}catch(e){alert('Stockage saturé. Réduisez les images des logos ou exportez vos modèles.');return false;}}
+function currentBibTemplate(){return {prefs:deepClone(loadBibPrefs()),design:deepClone(bibDesign())};}
+function renderBibTemplates(selected){
+ const el=document.getElementById('bibTemplateSelect');if(!el)return;
+ const old=selected===undefined?el.value:selected;
+ el.innerHTML='<option value="">— Choisir un modèle —</option>'+readBibTemplates().map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('');
+ if(readBibTemplates().some(t=>t.id===old))el.value=old;
+}
+function selectedBibTemplate(){return readBibTemplates().find(t=>t.id===document.getElementById('bibTemplateSelect').value);}
+function applyBibTemplate(t){
+ if(!t)return;
+ saveBibPrefs({...BIB_SIZE_DEFAULTS,...deepClone(t.prefs||{})});
+ state.settings.bibDesign={backgroundId:'none',backgroundOpacity:35,customBackground:'',...deepClone(t.design||{})};
+ save();renderBibTemplates(t.id);renderBibs();
+}
+document.getElementById('bibTemplateSaveNew').onclick=()=>{
+ const name=prompt('Nom du nouveau modèle de dossard :');if(!name?.trim())return;
+ const templates=readBibTemplates();const id='bib_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+ templates.push({id,name:name.trim(),...currentBibTemplate()});if(writeBibTemplates(templates))renderBibTemplates(id);
+};
+document.getElementById('bibTemplateLoad').onclick=()=>{
+ const t=selectedBibTemplate();if(!t)return alert('Sélectionnez un modèle.');
+ if(confirm(`Charger « ${t.name} » ? Les réglages actuels non enregistrés seront remplacés.`))applyBibTemplate(t);
+};
+document.getElementById('bibTemplateUpdate').onclick=()=>{
+ const t=selectedBibTemplate();if(!t)return alert('Sélectionnez un modèle.');
+ if(!confirm(`Remplacer le modèle « ${t.name} » par les réglages affichés ?`))return;
+ const all=readBibTemplates();const i=all.findIndex(x=>x.id===t.id);all[i]={id:t.id,name:t.name,...currentBibTemplate()};
+ if(writeBibTemplates(all))renderBibTemplates(t.id);
+};
+document.getElementById('bibTemplateRename').onclick=()=>{
+ const t=selectedBibTemplate();if(!t)return alert('Sélectionnez un modèle.');const name=prompt('Nouveau nom :',t.name);if(!name?.trim())return;
+ const all=readBibTemplates();all.find(x=>x.id===t.id).name=name.trim();if(writeBibTemplates(all))renderBibTemplates(t.id);
+};
+document.getElementById('bibTemplateDelete').onclick=()=>{
+ const t=selectedBibTemplate();if(!t)return alert('Sélectionnez un modèle.');
+ if(confirm(`Supprimer le modèle « ${t.name} » ? Le dossard en cours restera inchangé.`)){if(writeBibTemplates(readBibTemplates().filter(x=>x.id!==t.id)))renderBibTemplates('');}
+};
+document.getElementById('bibTemplateExport').onclick=()=>{
+ const t=selectedBibTemplate();const items=t?[t]:readBibTemplates();if(!items.length)return alert('Aucun modèle à exporter.');
+ downloadBlob(JSON.stringify({format:'cross-eps-bib-templates',version:2,templates:items},null,2),'cross-eps-modeles-dossards.json','application/json');
+};
+document.getElementById('bibTemplateImport').onchange=async e=>{
+ const f=e.target.files?.[0];if(!f)return;
+ try{
+  const data=JSON.parse(await f.text());if(data.format!=='cross-eps-bib-templates'||!Array.isArray(data.templates))throw Error('Format incorrect');
+  const existing=readBibTemplates();let count=0;
+  for(const t of data.templates){if(!t||typeof t.name!=='string'||!t.prefs||!t.design)continue;
+   existing.push({id:'bib_'+Date.now()+'_'+Math.random().toString(36).slice(2,9),name:t.name,prefs:t.prefs,design:t.design});count++;}
+  if(!count)throw Error('Aucun modèle valide');if(writeBibTemplates(existing)){renderBibTemplates();alert(`${count} modèle(s) importé(s).`);}
+ }catch(err){alert('Import impossible : '+err.message);}e.target.value='';
+};
+renderBibTemplates();
+
+// V21.2 : impression de la liste des participants.
+document.getElementById('printParticipantsBtn').onclick=()=>{
+ const order=prompt('Ordre : 1 = alphabétique, 2 = par classe, 3 = par numéro de dossard','2');
+ if(order===null)return;if(!['1','2','3'].includes(order))return alert('Choisissez 1, 2 ou 3.');
+ const scope=prompt('Participants : 1 = tous, 2 = une classe, 3 = une course','1');
+ if(scope===null)return;if(!['1','2','3'].includes(scope))return alert('Choisissez 1, 2 ou 3.');
+ let students=[...state.students],description='Tous les participants';
+ if(scope==='2'){
+  const classes=[...new Set(students.map(s=>s.className).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
+  const c=prompt('Classe à imprimer :\n'+classes.join(' · '));if(c===null)return;
+  students=students.filter(s=>String(s.className).toLocaleLowerCase('fr')===c.trim().toLocaleLowerCase('fr'));description='Classe '+c.trim();
+ }
+ if(scope==='3'){
+  const races=state.races||[];const choice=prompt('Numéro de course :\n'+races.map((r,i)=>`${i+1}. ${r.name}`).join('\n'));if(choice===null)return;
+  const r=races[Number(choice)-1];if(!r)return alert('Course inconnue.');
+  const ids=new Set(r.participantIds||[]);students=students.filter(s=>ids.has(s.id));description=r.name;
+ }
+ if(!students.length)return alert('Aucun participant dans cette sélection.');
+ const byName=(a,b)=>String(a.lastName||'').localeCompare(String(b.lastName||''),'fr')||String(a.firstName||'').localeCompare(String(b.firstName||''),'fr');
+ students.sort(order==='1'?byName:order==='2'?(a,b)=>String(a.className||'').localeCompare(String(b.className||''),'fr',{numeric:true})||byName(a,b):(a,b)=>(Number(a.bib)||999999)-(Number(b.bib)||999999)||byName(a,b));
+ const rows=students.map((s,i)=>`<tr><td>${i+1}</td><td>${esc(s.className||'')}</td><td>${esc(s.lastName||'')}</td><td>${esc(s.firstName||'')}</td><td><b>${esc(s.bib==null?'—':formatBib(s.bib))}</b></td></tr>`).join('');
+ const w=window.open('','_blank');if(!w)return alert('Autorisez les fenêtres contextuelles pour imprimer la liste.');
+ w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Liste des participants</title><style>
+ @page{size:A4;margin:12mm}body{font:11pt Arial,sans-serif;color:#111}h1{font-size:18pt;margin:0 0 6mm}.meta{margin-bottom:6mm;color:#444}table{width:100%;border-collapse:collapse}th,td{padding:5px 7px;border-bottom:1px solid #ccc;text-align:left}th{background:#e9f1f4}thead{display:table-header-group}tr{break-inside:avoid}footer{margin-top:12px;font-size:9pt;color:#666}@media print{button{display:none}}</style></head><body>
+ <h1>Liste des participants — CROSS EPS</h1><div class="meta">${esc(description)} · ${students.length} participant(s) · ${new Date().toLocaleDateString('fr-FR')}</div>
+ <table><thead><tr><th>N°</th><th>Classe</th><th>Nom</th><th>Prénom</th><th>Dossard</th></tr></thead><tbody>${rows}</tbody></table>
+ <footer>Document réservé à l'organisation de l'événement.</footer><script>window.onload=()=>{setTimeout(()=>window.print(),250)}<\/script></body></html>`);
+ w.document.close();
+};
