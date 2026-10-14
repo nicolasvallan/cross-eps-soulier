@@ -3014,27 +3014,39 @@ window.laneApply=()=>{
 function syncOfficialArrivalMode(){
   const select=document.getElementById('finishWorkflow');if(!select)return;
   const ctx=laneContext();
-  if(!ctx){select.value='direct';select.disabled=true;return;}
+  if(!ctx||!ctx.races.length){select.value='direct';select.disabled=true;return;}
   const modes=[...new Set(ctx.races.map(r=>r.arrivalMode||'direct'))];
-  if(modes.length!==1){select.value='direct';select.disabled=true;select.title='Les courses du groupe doivent avoir le même mode';return;}
-  select.disabled=false;select.title='';select.value=modes[0];
+  // Un groupe composé de courses aux modes différents reste modifiable.
+  // L'utilisateur peut choisir un mode commun sans perdre les résultats antérieurs.
+  select.disabled=false;
+  select.value=modes.length===1?modes[0]:'direct';
+  select.title=modes.length===1?'':'Modes différents dans ce groupe : choisissez un mode commun';
 }
 function changeArrivalWorkflow(next){
-  const ctx=laneContext(),select=document.getElementById('finishWorkflow');
-  if(!ctx||ctx.races.length===0){syncOfficialArrivalMode();return;}
+  const ctx=laneContext();
+  if(!ctx||!ctx.races.length){syncOfficialArrivalMode();return;}
   const previous=[...new Set(ctx.races.map(r=>r.arrivalMode||'direct'))];
-  if(previous.length!==1){alert('Choisissez une seule course ou harmonisez les modes du groupe.');syncOfficialArrivalMode();return;}
-  if(previous[0]===next)return;
-  const pendingEntries=laneItems(ctx),pendingTaps=laneTaps(ctx);
-  // Les anciennes versions ne marquaient pas les passages déjà associés.
-  // On les reconnaît uniquement si chaque dossard a un résultat officiel et si les effectifs concordent.
+  if(previous.length===1&&previous[0]===next)return;
+  const raceIds=new Set(ctx.races.map(r=>r.id));
+  const relatedContexts=new Set([ctx.key]);
+  for(const g of state.startGroups||[]){
+    if((g.raceIds||[]).some(id=>raceIds.has(id)))relatedContexts.add('group:'+g.id);
+  }
+  for(const id of raceIds)relatedContexts.add('race:'+id);
+  const pendingEntries=(state.laneEntries||[]).filter(e=>!e.associated&&(raceIds.has(e.raceId)||relatedContexts.has(e.context)));
+  const pendingTaps=(state.finishTaps||[]).filter(t=>!t.associated&&relatedContexts.has(t.context));
+  // Anciennes associations sans indicateur : reconnaître seulement les lots complets.
   if(pendingEntries.length||pendingTaps.length){
     const allMatched=pendingEntries.length===pendingTaps.length&&pendingEntries.length>0&&pendingEntries.every(e=>resultFor(raceById(e.raceId),e.studentId)?.finishSeconds!=null);
     if(allMatched){pendingEntries.forEach(e=>e.associated=true);pendingTaps.forEach(t=>t.associated=true);}
-    else{alert('Des scans ou temps ne sont pas encore associés. Terminez ou corrigez leur association avant de changer de mode. Aucun résultat n’a été supprimé.');syncOfficialArrivalMode();return;}
+    else{
+      alert('Des dossards ou des temps sont encore en attente dans une course du groupe. Associez-les avant de changer de mode. Aucun résultat n’a été supprimé.');
+      syncOfficialArrivalMode();return;
+    }
   }
   const finished=ctx.races.reduce((n,r)=>n+Object.values(r.results||{}).filter(v=>v?.finishSeconds!=null).length,0);
-  if(!confirm(`Passer en mode ${next==='lanes'?'Couloirs + chrono':'Scan direct'} ?\n\n${finished} arrivée(s) déjà validée(s) seront conservées avec leurs temps et resteront dans les résultats. Seules les prochaines arrivées utiliseront le nouveau mode.`)){
+  const scope=ctx.key.startsWith('group:')?`toutes les ${ctx.races.length} courses de ce départ groupé`:'cette course';
+  if(!confirm(`Passer ${scope} en mode ${next==='lanes'?'Couloirs + chrono':'Scan direct'} ?\n\n${finished} arrivée(s) déjà validée(s) seront conservées avec leurs temps. Les prochaines arrivées utiliseront le nouveau mode.`)){
     syncOfficialArrivalMode();return;
   }
   ctx.races.forEach(r=>r.arrivalMode=next);
