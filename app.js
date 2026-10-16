@@ -658,7 +658,7 @@ function activeRaceParticipants(r){
 }
 function sortedFinishers(r){
   return (r.participantIds||[]).map(studentById).filter(Boolean)
-    .filter(s=>!participantIsWithdrawn(r,s.id))
+    .filter(s=>!participantIsWithdrawn(r,s.id) && !resultFor(r,s.id)?.disqualified)
     .filter(s=>resultFor(r,s.id)?.finishSeconds!=null)
     .sort((a,b)=>resultFor(r,a.id).finishSeconds-resultFor(r,b.id).finishSeconds);
 }
@@ -1073,7 +1073,7 @@ document.getElementById("saveRaceBtn").onclick=e=>{
   const rawBirth2=raceBirthMax.value?Number(raceBirthMax.value):null;
   const normalizedBirthMin=rawBirth1!==null&&rawBirth2!==null?Math.min(rawBirth1,rawBirth2):(rawBirth1??rawBirth2);
   const normalizedBirthMax=rawBirth1!==null&&rawBirth2!==null?Math.max(rawBirth1,rawBirth2):(rawBirth1??rawBirth2);
-  const data={id,arrivalLaneCount,arrivalMode,name:raceName.value.trim(),distance:Number(raceDistance.value),gender:raceGender.value,birthMin:normalizedBirthMin,birthMax:normalizedBirthMax,classNames,bibStart,bibEnd,participantIds:selected,manualParticipantIds,startedAt:existing?.startedAt||null,stoppedAt:existing?.stoppedAt||null,results:existing?.results||{},participantStatus:existing?.participantStatus||{}};
+  const data={id,arrivalLaneCount,arrivalMode,name:raceName.value.trim(),distance:Number(raceDistance.value),gender:raceGender.value,birthMin:normalizedBirthMin,birthMax:normalizedBirthMax,classNames,bibStart,bibEnd,participantIds:selected,manualParticipantIds,startedAt:existing?.startedAt||null,stoppedAt:existing?.stoppedAt||null,results:existing?.results||{},participantStatus:existing?.participantStatus||{},correctionHistory:existing?.correctionHistory||[]};
   const idx=state.races.findIndex(r=>r.id===id); if(idx>=0)state.races[idx]=data;else state.races.push(data);raceDialog.close();save();
 };
 
@@ -1791,7 +1791,7 @@ function resultContextRows(ctx){
       Object.entries(r.results||{}).forEach(([sid,res])=>{
         if(res?.finishSeconds==null)return;
         const status=r.participantStatus?.[sid]?.status||"active";
-        if(status==="no_start"||status==="abandoned")return;
+        if(status==="no_start"||status==="abandoned"||res?.disqualified)return;
         const s=byId.get(sid);
         if(s)rows.push({student:s,race:r,sec:res.finishSeconds,archived:true});
       });
@@ -1807,6 +1807,105 @@ function resultContextRows(ctx){
   });
   return rows.sort((a,b)=>a.sec-b.sec);
 }
+
+function resultExtraRows(ctx){
+  if(!ctx)return [];
+  const rows=[];
+  for(const r of ctx.races){
+    const participants=ctx.mode==='archive'?(r.participants||[]):(r.participantIds||[]).map(studentById).filter(Boolean);
+    for(const student of participants){
+      const sid=student.id;
+      const status=r.participantStatus?.[sid]?.status||'active';
+      const result=r.results?.[sid]||{};
+      const label=result.disqualified?'Déclassé':status==='abandoned'?'Abandon':status==='no_start'?'Non partant':null;
+      if(label)rows.push({student,race:r,sec:result.finishSeconds,label,reason:result.disqualificationReason||''});
+    }
+  }
+  const order={'Déclassé':0,'Abandon':1,'Non partant':2};
+  return rows.sort((a,b)=>order[a.label]-order[b.label]||(a.student.lastName||'').localeCompare(b.student.lastName||'','fr'));
+}
+function recordCorrection(r,studentId,kind,before,after,reason){
+  r.correctionHistory=r.correctionHistory||[];
+  r.correctionHistory.push({id:uid('correction'),studentId,kind,before,after,reason:reason||'',at:Date.now()});
+}
+window.correctRaceDistance=()=>{
+  if(!isAdmin())return alert('Réservé à l’administration.');
+  const ctx=currentResultContext();if(!ctx||ctx.mode==='archive')return alert('Choisissez une course ou un départ groupé.');
+  const rid=ctx.mode==='race'?ctx.race.id:prompt('Départ groupé : indiquez le nom exact de la catégorie à corriger :',ctx.races[0]?.name||'');
+  const r=ctx.mode==='race'?ctx.race:ctx.races.find(x=>x.name===rid);
+  if(!r)return alert('Catégorie introuvable.');
+  const input=prompt(`Nouvelle distance en mètres pour « ${r.name} » :`,String(r.distance));
+  if(input===null)return;
+  const value=Number(input.replace(',','.'));
+  if(!Number.isFinite(value)||value<=0)return alert('Distance invalide.');
+  if(!confirm(`Passer de ${r.distance} m à ${value} m ? Les temps enregistrés ne seront pas modifiés.`))return;
+  const old=r.distance;r.distance=value;recordCorrection(r,null,'distance',old,value,'Correction de parcours');save();
+};
+window.addMissingResult=()=>{
+  if(!isAdmin())return alert('Réservé à l’administration.');
+  const ctx=currentResultContext();if(!ctx||ctx.mode==='archive')return alert('Choisissez une course ou un départ groupé.');
+  const bib=prompt('Numéro de dossard de l’élève oublié :');if(bib===null)return;
+  const options=[];
+  ctx.races.forEach(r=>(r.participantIds||[]).forEach(sid=>{const st=studentById(sid);if(st&&String(Number(st.bib))===String(Number(bib)))options.push({r,st});}));
+  if(options.length!==1)return alert('Dossard absent ou ambigu dans cette sélection. Vérifiez la catégorie.');
+  const {r,st}=options[0];if(resultFor(r,st.id)?.finishSeconds!=null)return alert('Cet élève a déjà un temps. Utilisez Corriger.');
+  const value=prompt(`Temps de ${st.lastName} ${st.firstName} en secondes :`);if(value===null)return;
+  const sec=Number(value.replace(',','.'));if(!Number.isFinite(sec)||sec<=0)return alert('Temps invalide.');
+  if(!confirm(`Ajouter ${st.lastName} ${st.firstName} avec ${sec} secondes ?`))return;
+  const before=structuredClone(r.results?.[st.id]||{});
+  r.results=r.results||{};r.results[st.id]={...before,finishSeconds:sec,finishedAt:Date.now(),manual:true,disqualified:false};
+  if(r.participantStatus?.[st.id])delete r.participantStatus[st.id];
+  recordCorrection(r,st.id,'ajout manuel',before,r.results[st.id],'Dossard non scanné');save();
+};
+// Correction administrative : les résultats suivent les coureurs, pas les dossards prêtés.
+window.openSwapResults=()=>{
+  if(!isAdmin())return alert('Réservé à l’administration.');
+  const ctx=currentResultContext();
+  if(!ctx||ctx.mode==='archive')return alert('Sélectionnez une course ou un départ groupé actif.');
+  const raceSel=document.getElementById('swapRaceSelect');
+  raceSel.innerHTML=ctx.races.map(r=>`<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('');
+  refreshSwapStudents();
+  document.getElementById('swapResultsDialog').showModal();
+};
+window.refreshSwapStudents=()=>{
+  const r=raceById(document.getElementById('swapRaceSelect').value);
+  const options=(r?.participantIds||[]).map(studentById).filter(Boolean)
+    .sort((a,b)=>(Number(a.bib)||0)-(Number(b.bib)||0))
+    .map(st=>`<option value="${esc(st.id)}">${esc(formatBib(st.bib))} — ${esc(st.lastName)} ${esc(st.firstName)}</option>`).join('');
+  const first=document.getElementById('swapStudentA'),second=document.getElementById('swapStudentB');
+  first.innerHTML=options;second.innerHTML=options;
+  if(second.options.length>1)second.selectedIndex=1;
+};
+window.swapResults=()=>{
+  if(!isAdmin())return alert('Réservé à l’administration.');
+  const r=raceById(document.getElementById('swapRaceSelect').value);
+  const a=document.getElementById('swapStudentA').value,b=document.getElementById('swapStudentB').value;
+  if(!r||!a||!b||a===b)return alert('Choisissez deux élèves différents de la même course.');
+  if(!(r.participantIds||[]).includes(a)||!(r.participantIds||[]).includes(b))return alert('Élèves absents de cette course.');
+  const sa=studentById(a),sb=studentById(b);
+  const oldA=structuredClone(r.results?.[a]||{}),oldB=structuredClone(r.results?.[b]||{});
+  if(oldA.finishSeconds==null&&oldB.finishSeconds==null)return alert('Aucun temps à permuter.');
+  const checkpointsA=(state.checkpoints||[]).filter(c=>c.raceId===r.id&&c.studentId===a).length;
+  const checkpointsB=(state.checkpoints||[]).filter(c=>c.raceId===r.id&&c.studentId===b).length;
+  const msg=`Permuter les arrivées de ${sa.lastName} ${sa.firstName} (dossard ${formatBib(sa.bib)}) et ${sb.lastName} ${sb.firstName} (dossard ${formatBib(sb.bib)}) ?\n\nLes temps, les passages aux contrôles et les scans d’arrivée seront échangés. Les identités et numéros officiels ne changent pas.\nContrôles enregistrés : ${checkpointsA} et ${checkpointsB}.`;
+  if(!confirm(msg))return;
+  r.results=r.results||{};
+  // Préserver les statuts administratifs individuels : seule la donnée de course est échangée.
+  const courseFields=['finishSeconds','finishedAt','estimatedFinish','arrivalSource','manual'];
+  const nextA={...oldA},nextB={...oldB};
+  for(const field of courseFields){
+    if(Object.prototype.hasOwnProperty.call(oldB,field))nextA[field]=oldB[field];else delete nextA[field];
+    if(Object.prototype.hasOwnProperty.call(oldA,field))nextB[field]=oldA[field];else delete nextB[field];
+  }
+  r.results[a]=nextA;r.results[b]=nextB;
+  for(const c of state.checkpoints||[]){if(c.raceId===r.id){if(c.studentId===a)c.studentId=b;else if(c.studentId===b)c.studentId=a;}}
+  for(const e of state.laneEntries||[]){if(e.raceId===r.id){if(e.studentId===a)e.studentId=b;else if(e.studentId===b)e.studentId=a;}}
+  const reason='Inversion de dossards entre '+formatBib(sa.bib)+' et '+formatBib(sb.bib);
+  recordCorrection(r,a,'permutation',oldA,nextA,reason);
+  recordCorrection(r,b,'permutation',oldB,nextB,reason);
+  document.getElementById('swapResultsDialog').close();
+  save();
+};
 
 function resultContextParticipantCount(ctx){
   if(!ctx)return 0;
@@ -1896,6 +1995,13 @@ function renderResults(){
   const avg=speeds.length?speeds.reduce((a,b)=>a+b,0)/speeds.length:0;
   rAvgSpeed.textContent=speeds.length?`${avg.toFixed(2)} km/h`:"—";
 
+  const extras=resultExtraRows(ctx).filter(x=>!selectedClass||(x.student.className||"Sans classe")===selectedClass);
+  const checkpointNames=(state.checkpointPoints||[]).map(p=>p.name);
+  const cpLabel=(rid,sid)=>checkpointNames.map((name,i)=>{
+    const point=(state.checkpointPoints||[])[i];
+    const found=(state.checkpoints||[]).some(c=>c.raceId===rid&&c.studentId===sid&&(c.pointId===point.id||(!c.pointId&&c.name===name)));
+    return `${esc(name)} : ${found?'✓':'—'}`;
+  }).join(' · ')||'—';
   const showCategory=ctx.mode!=="race";
   resultsTableHead.innerHTML=`<tr>
     <th>${showCategory?"Rang groupé":"Rang course"}</th>
@@ -1908,6 +2014,7 @@ function renderResults(){
     <th>Temps</th>
     <th>Vitesse</th>
     <th>Allure</th>
+    <th>Contrôles</th>
     <th>Actions</th>
   </tr>`;
 
@@ -1927,9 +2034,14 @@ function renderResults(){
       <td>${formatTime(x.sec)}</td>
       <td>${speedKmH(distance,x.sec).toFixed(2)} km/h</td>
       <td>${pace(distance,x.sec)}</td>
+      <td>${cpLabel(rid,x.student.id)}</td>
       <td>${ctx.mode==="archive"||!isAdmin()?"—":`<button class="btn secondary" onclick="openEditResult('${rid}','${x.student.id}')">Corriger</button> <button class="btn danger" onclick="undoFinish('${rid}','${x.student.id}')">Réintégrer</button>`}</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="${showCategory?11:10}" class="muted">Aucun résultat pour cette sélection.</td></tr>`;
+  }).join("") + extras.map(x=>{
+    const rid=x.race.id, sid=x.student.id;
+    const action=ctx.mode==='archive'||!isAdmin()?'—':`<button class="btn secondary" onclick="openEditResult('${rid}','${sid}')">Corriger</button>`;
+    return `<tr><td><strong>${esc(x.label)}${x.reason?` — ${esc(x.reason)}`:""}</strong></td>${showCategory?'<td>—</td>':''}<td>—</td><td>${esc(formatBib(x.student.bib))}</td><td>${esc(x.student.lastName)} ${esc(x.student.firstName)}</td><td>${esc(x.student.className)}</td><td>${esc(x.race.name||x.race.raceName||'')}</td><td>${x.sec!=null?formatTime(x.sec):'—'}</td><td>—</td><td>—</td><td>${cpLabel(rid,sid)}</td><td>${action}</td></tr>`;
+  }).join("") || `<tr><td colspan="${showCategory?12:11}" class="muted">Aucun résultat pour cette sélection.</td></tr>`;
 
   const classGroups={};
   rows.forEach(x=>{
@@ -1962,6 +2074,8 @@ window.openEditResult=(raceId,sid)=>{
   const r=raceById(raceId);
   editResultStudentId.value=sid;
   editResultSeconds.value=resultFor(r,sid)?.finishSeconds??"";
+  document.getElementById('editDisqualified').checked=!!resultFor(r,sid)?.disqualified;
+  document.getElementById('editReason').value=resultFor(r,sid)?.disqualificationReason||'';
   editResultDialog.showModal();
 };
 
@@ -1969,10 +2083,17 @@ document.getElementById("saveResultBtn").onclick=e=>{
   e.preventDefault();
   const r=raceById(resultsRaceSelect.value),sid=editResultStudentId.value;
   if(!r||!sid)return;
-  const sec=Number(editResultSeconds.value);
-  if(!Number.isFinite(sec)||sec<0){alert("Temps invalide.");return;}
+  const input=editResultSeconds.value.trim();
+  const sec=input===''?null:Number(input.replace(',','.'));
+  if(sec!==null&&(!Number.isFinite(sec)||sec<0)){alert("Temps invalide.");return;}
+  const disqualified=document.getElementById('editDisqualified').checked;
+  const reason=document.getElementById('editReason').value.trim();
+  if(disqualified&&!reason){alert('Indiquez le motif du déclassement.');return;}
+  if(!confirm('Enregistrer cette correction du résultat ?'))return;
   r.results=r.results||{};
-  r.results[sid]={...(r.results[sid]||{}),finishSeconds:sec,finishedAt:Date.now(),manual:true};
+  const before=structuredClone(r.results[sid]||{});
+  r.results[sid]={...before,finishSeconds:sec,finishedAt:sec===null?null:Date.now(),manual:true,disqualified,disqualificationReason:disqualified?reason:''};
+  recordCorrection(r,sid,'résultat',before,r.results[sid],reason);
   editResultDialog.close();
   save();
 };
@@ -2036,6 +2157,34 @@ document.getElementById("exportResultsBtn").onclick=()=>{
   const csv=csvRows.map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(";")).join("\n");
   const suffix=selectedClass?`-${slug(selectedClass)}`:"";
   downloadBlob(csv,`${slug(ctx.name)}${suffix}-resultats.csv`,"text/csv;charset=utf-8");
+};
+
+
+window.exportResultsPdf=()=>{
+  const ctx=currentResultContext();if(!ctx)return alert('Choisissez des résultats.');
+  const selectedClass=document.getElementById('resultsClassSelect')?.value||'';
+  const included=[...document.querySelectorAll('#pdfColumnChoices input:checked')].map(x=>x.value);
+  if(!included.length)return alert('Sélectionnez au moins une colonne.');
+  const rows=resultContextRows(ctx), extras=resultExtraRows(ctx);
+  const filtered=rows.filter(x=>!selectedClass||x.student.className===selectedClass).map((x,i)=>({...x,label:'',rank:i+1}));
+  for(const x of extras){
+    if(selectedClass&&x.student.className!==selectedClass)continue;
+    const option=x.label==='Déclassé'?'pdfIncludeDQ':x.label==='Abandon'?'pdfIncludeAB':'pdfIncludeNP';
+    if(document.getElementById(option)?.checked)filtered.push({...x,rank:'—'});
+  }
+  const fields={rank:'Classement',bib:'Dossard',name:'Élève',class:'Classe',category:'Catégorie',distance:'Distance (m)',time:'Temps',speed:'Vitesse',pace:'Allure',checkpoints:'Points de contrôle',status:'Statut'};
+  const htmlRows=filtered.map(x=>{
+    const r=x.race,st=x.student,sec=x.sec;
+    const points=(state.checkpointPoints||[]).map(p=>{
+      const ok=(state.checkpoints||[]).some(c=>c.raceId===(r.raceId||r.id)&&c.studentId===st.id&&(c.pointId===p.id||(!c.pointId&&c.name===p.name)));
+      return `${p.name} : ${ok?'Oui':'Non'}`;
+    }).join(' / ');
+    const vals={rank:x.rank,bib:formatBib(st.bib),name:`${st.lastName} ${st.firstName}`,class:st.className,category:r.raceName||r.name,distance:r.distance,time:sec!=null?formatTime(sec):'—',speed:sec>0?speedKmH(r.distance,sec).toFixed(2)+' km/h':'—',pace:sec>0?pace(r.distance,sec):'—',checkpoints:points,status:x.label?x.label+(x.reason?' — '+x.reason:''):'Classé'};
+    return '<tr>'+included.map(k=>`<td>${esc(vals[k]??'')}</td>`).join('')+'</tr>';
+  }).join('');
+  const doc=`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Résultats - ${esc(ctx.name)}</title><style>@page{size:A4 landscape;margin:12mm}body{font-family:Arial,sans-serif;color:#182436}h1{margin-bottom:5px;font-size:22px}p{color:#555}table{border-collapse:collapse;width:100%;font-size:10px}th,td{border:1px solid #bbb;padding:6px;text-align:left}th{background:#e9eef5}tr:nth-child(even){background:#f8fafc}thead{display:table-header-group}</style></head><body><h1>Collège Jean-Jacques Soulier — Résultats</h1><p>${esc(ctx.name)}${selectedClass?' — '+esc(selectedClass):''} · ${new Date().toLocaleDateString('fr-FR')}</p><table><thead><tr>${included.map(k=>`<th>${esc(fields[k])}</th>`).join('')}</tr></thead><tbody>${htmlRows}</tbody></table><p>${filtered.length} élèves affichés</p></body></html>`;
+  const win=window.open('','_blank');if(!win)return alert('Autorisez les fenêtres surgissantes pour imprimer en PDF.');
+  win.document.open();win.document.write(doc);win.document.close();win.focus();setTimeout(()=>win.print(),400);
 };
 
 function downloadBlob(content,name,type){const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
@@ -2205,6 +2354,45 @@ function renderBibs(){
   if(!students.length){preview.innerHTML='<p class="muted">Aucun participant dans cette course.</p>';return;}
   preview.innerHTML=students.slice(0,2).map(s=>bibCardHTML(s,r,prefs)).join('<div class="cut-line">✂</div>');
 }
+// Planche compacte pour contrôle manuel : lecture seule, aucune modification des résultats.
+document.getElementById("printMiniBibsBtn")?.addEventListener("click",()=>{
+  const r=raceById(document.getElementById("bibRaceSelect").value);
+  if(!r){alert("Choisissez une course.");return;}
+  const students=(r.participantIds||[]).map(studentById).filter(Boolean)
+    .sort((a,b)=>Number(a.bib||999999)-Number(b.bib||999999));
+  if(!students.length){alert("Cette course ne contient aucun participant.");return;}
+  const perPage=28; // 4 colonnes x 7 lignes sur une feuille A4.
+  const pages=[];
+  for(let i=0;i<students.length;i+=perPage){
+    const cells=students.slice(i,i+perPage).map(st=>`<article class="mini">
+      <div class="mini-no">${esc(formatBib(st.bib))}</div>
+      <div class="mini-person">${isAnonymousMode()?"Dossard anonyme":`${esc(st.lastName)} ${esc(st.firstName)}`}</div>
+      <div class="mini-bottom"><span>${isAnonymousMode()?"":esc(st.className)}</span><span class="mini-qr">${qrSvg(st,2)}</span></div>
+      <div class="mini-check">☐ Vérifié</div>
+    </article>`).join("");
+    pages.push(`<section class="sheet"><header><strong>${esc(r.name)}</strong><span>Contrôle manuel des dossards · ${i+1}–${Math.min(i+perPage,students.length)} / ${students.length}</span></header><div class="mini-grid">${cells}</div></section>`);
+  }
+  const w=window.open("","_blank");
+  if(!w){alert("Autorisez les fenêtres contextuelles pour imprimer.");return;}
+  w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Mini-dossards - ${esc(r.name)}</title><style>
+    @page{size:A4 portrait;margin:8mm}
+    *{box-sizing:border-box}html,body{margin:0;padding:0;color:#17232d;font-family:Arial,sans-serif}
+    .sheet{width:194mm;height:281mm;break-after:page;page-break-after:always;overflow:hidden}
+    .sheet:last-child{break-after:auto;page-break-after:auto}
+    header{height:21mm;display:flex;flex-direction:column;justify-content:center;gap:2mm;border-bottom:1px solid #555;margin-bottom:4mm}
+    header strong{font-size:14pt}header span{font-size:9pt;color:#444}
+    .mini-grid{display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(7,36mm);gap:1mm}
+    .mini{border:1px solid #666;border-radius:1mm;padding:1.5mm;overflow:hidden;display:flex;flex-direction:column;break-inside:avoid}
+    .mini-no{font-size:23pt;line-height:1;font-weight:900;text-align:center}
+    .mini-person{font-size:8pt;font-weight:700;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1mm}
+    .mini-bottom{display:flex;justify-content:space-between;align-items:center;min-height:12mm;font-size:8pt;font-weight:600}
+    .mini-qr svg{display:block;width:12mm;height:12mm}
+    .mini-check{font-size:7pt;margin-top:auto;border-top:1px dotted #aaa;padding-top:.5mm}
+    @media screen{body{background:#ddd}.sheet{background:#fff;margin:12px auto;padding:0;box-shadow:0 2px 12px #aaa}}
+  </style></head><body>${pages.join("")}<script>window.onload=()=>setTimeout(()=>window.print(),350)<\/script></body></html>`);
+  w.document.close();
+});
+
 document.getElementById("printBibsBtn").onclick=()=>{
   const r=raceById(bibRaceSelect.value);
   if(!r){alert("Choisissez une course.");return;}

@@ -283,7 +283,8 @@
           <div><h2>Résultats</h2><p>Consultez une catégorie seule, un départ groupé ou une course archivée.</p></div>
           <div class="actions">
             <button id="archiveResultsBtn" class="btn secondary">Sauvegarder les résultats</button>
-            <button id="exportResultsBtn" class="btn primary">Exporter CSV</button>
+            <button id="exportResultsBtn" class="btn secondary">Exporter CSV</button>
+            <button class="btn primary" onclick="exportResultsPdf()">Exporter PDF</button>
           </div>
         </div>
 
@@ -316,6 +317,15 @@
               </select>
             </div>
           </div>
+          <div class="panel soft"><h3>Export PDF — colonnes et statuts</h3><div id="pdfColumnChoices" class="form-grid">
+          <label><input type="checkbox" value="rank" checked> Classement</label><label><input type="checkbox" value="bib" checked> Dossard</label>
+          <label><input type="checkbox" value="name" checked> Élève</label><label><input type="checkbox" value="class" checked> Classe</label>
+          <label><input type="checkbox" value="category" checked> Catégorie</label><label><input type="checkbox" value="distance"> Distance</label>
+          <label><input type="checkbox" value="time" checked> Temps</label><label><input type="checkbox" value="speed" checked> Vitesse</label>
+          <label><input type="checkbox" value="pace"> Allure</label><label><input type="checkbox" value="checkpoints" checked> Points de contrôle</label>
+          <label><input type="checkbox" value="status" checked> Statut</label>
+          </div><div class="form-grid"><label><input type="checkbox" id="pdfIncludeDQ" checked> Inclure les déclassés</label><label><input type="checkbox" id="pdfIncludeAB" checked> Inclure les abandons</label><label><input type="checkbox" id="pdfIncludeNP" checked> Inclure les non-partants</label></div></div>
+          <div class="actions"><button class="btn secondary" onclick="correctRaceDistance()">Corriger la distance</button><button class="btn primary" onclick="addMissingResult()">Ajouter une arrivée oubliée</button> <button class="btn secondary" onclick="openSwapResults()">Permuter deux élèves</button></div>
           <div class="cards four compact">
             <article class="stat-card"><span>Participants</span><strong id="rParticipants">0</strong></article>
             <article class="stat-card"><span>Arrivés</span><strong id="rFinishers">0</strong></article>
@@ -346,7 +356,7 @@
       <section id="bibs" class="view">
         <div class="section-head">
           <div><h2>Dossards</h2><p>Génération A5 : 2 dossards sur une page A4.</p></div>
-          <button id="printBibsBtn" class="btn primary">Imprimer / Enregistrer en PDF</button>
+          <div class="actions wrap"><button id="printBibsBtn" class="btn primary">Imprimer dossards A5</button><button id="printMiniBibsBtn" class="btn secondary" type="button">Imprimer mini-dossards A4 (contrôle manuel)</button></div>
         </div>
 
         <div class="bibs-layout">
@@ -764,11 +774,24 @@
     </form>
   </dialog>
 
+  <dialog id="swapResultsDialog">
+    <form method="dialog" class="dialog-form">
+      <h3>Permuter deux élèves (dossards inversés)</h3>
+      <p class="muted">Les temps et les passages aux contrôles suivent les coureurs. Les noms, dossards officiels et statuts administratifs restent inchangés.</p>
+      <div><label>Course / catégorie</label><select class="input" id="swapRaceSelect" onchange="refreshSwapStudents()"></select></div>
+      <div><label>Premier élève</label><select class="input" id="swapStudentA"></select></div>
+      <div><label>Deuxième élève</label><select class="input" id="swapStudentB"></select></div>
+      <div class="dialog-actions"><button value="cancel" class="btn secondary">Annuler</button><button type="button" class="btn primary" onclick="swapResults()">Confirmer la permutation</button></div>
+    </form>
+  </dialog>
+
   <dialog id="editResultDialog">
     <form method="dialog" id="editResultForm" class="dialog-form">
       <h3>Corriger un résultat</h3>
       <input type="hidden" id="editResultStudentId" />
-      <div><label>Temps en secondes</label><input id="editResultSeconds" type="number" min="0" step="0.1" class="input" /></div>
+      <div><label>Temps en secondes (laisser vide si absent)</label><input id="editResultSeconds" type="number" min="0" step="0.1" class="input" /></div>
+      <label><input type="checkbox" id="editDisqualified"> Élève déclassé</label>
+      <div><label>Motif du déclassement / correction</label><input id="editReason" class="input" placeholder="Motif" /></div>
       <div class="dialog-actions"><button value="cancel" class="btn secondary">Annuler</button><button id="saveResultBtn" value="default" class="btn primary">Enregistrer</button></div>
     </form>
   </dialog>
@@ -798,6 +821,6 @@
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=21-8-chrono-resultats"></script>
+  <script src="app.js?v=22-1-mini-dossards"></script>
 </body>
 </html>
